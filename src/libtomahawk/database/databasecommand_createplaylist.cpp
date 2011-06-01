@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -21,7 +21,7 @@
 #include <QSqlQuery>
 
 #include "network/servent.h"
-#include "playlist/playlistmanager.h"
+#include "viewmanager.h"
 
 using namespace Tomahawk;
 
@@ -47,7 +47,7 @@ DatabaseCommand_CreatePlaylist::DatabaseCommand_CreatePlaylist( const source_ptr
 void
 DatabaseCommand_CreatePlaylist::exec( DatabaseImpl* lib )
 {
-    createPlaylist(lib, false);
+    createPlaylist( lib, false );
 }
 
 
@@ -55,53 +55,65 @@ void
 DatabaseCommand_CreatePlaylist::postCommitHook()
 {
     qDebug() << Q_FUNC_INFO;
-    if ( source().isNull() || source()->collection().isNull() )
-    {
-        qDebug() << "Source has gone offline, not emitting to GUI.";
-        return;
-    }
-    if( m_report == false )
+    if ( m_report == false )
         return;
 
-    qDebug() << Q_FUNC_INFO << "..reporting..";
-    if( m_playlist.isNull() ) {
+    qDebug() << Q_FUNC_INFO << "reporting...";
+    if ( m_playlist.isNull() )
+    {
         source_ptr src = source();
-        QMetaObject::invokeMethod( PlaylistManager::instance(),
-                                "createPlaylist",
-                                Qt::BlockingQueuedConnection,
-                                QGenericArgument( "Tomahawk::source_ptr", (const void*)&src ),
-                                Q_ARG( QVariant, m_v )
-                                 );
-    } else {
+        QMetaObject::invokeMethod( ViewManager::instance(),
+                                   "createPlaylist",
+                                   Qt::BlockingQueuedConnection,
+                                   QGenericArgument( "Tomahawk::source_ptr", (const void*)&src ),
+                                   Q_ARG( QVariant, m_v ) );
+    }
+    else
+    {
         m_playlist->reportCreated( m_playlist );
     }
-    
 
-    if( source()->isLocal() )
+    if ( source()->isLocal() )
         Servent::instance()->triggerDBSync();
 }
 
-void 
+
+void
 DatabaseCommand_CreatePlaylist::createPlaylist( DatabaseImpl* lib, bool dynamic)
 {
     qDebug() << Q_FUNC_INFO;
     Q_ASSERT( !( m_playlist.isNull() && m_v.isNull() ) );
     Q_ASSERT( !source().isNull() );
-    
+
+    uint now = 0;
+    if ( m_playlist.isNull() )
+    {
+        now = m_v.toMap()[ "createdon" ].toUInt();
+    }
+    else
+    {
+        now = QDateTime::currentDateTime().toTime_t();
+        m_playlist->setCreatedOn( now );
+    }
+
     TomahawkSqlQuery cre = lib->newquery();
-    cre.prepare( "INSERT INTO playlist( guid, source, shared, title, info, creator, lastmodified, dynplaylist) "
-                 "VALUES( :guid, :source, :shared, :title, :info, :creator, :lastmodified, :dynplaylist )" );
-    
+    cre.prepare( "INSERT INTO playlist( guid, source, shared, title, info, creator, lastmodified, dynplaylist, createdOn ) "
+                 "VALUES( :guid, :source, :shared, :title, :info, :creator, :lastmodified, :dynplaylist, :createdOn )" );
+
     cre.bindValue( ":source", source()->isLocal() ? QVariant(QVariant::Int) : source()->id() );
     cre.bindValue( ":dynplaylist", dynamic );
-    if( !m_playlist.isNull() ) {
+    cre.bindValue( ":createdOn", now );
+    if ( !m_playlist.isNull() )
+    {
         cre.bindValue( ":guid", m_playlist->guid() );
         cre.bindValue( ":shared", m_playlist->shared() );
         cre.bindValue( ":title", m_playlist->title() );
         cre.bindValue( ":info", m_playlist->info() );
         cre.bindValue( ":creator", m_playlist->creator() );
         cre.bindValue( ":lastmodified", m_playlist->lastmodified() );
-    } else {
+    }
+    else
+    {
         QVariantMap m = m_v.toMap();
         cre.bindValue( ":guid", m.value( "guid" ) );
         cre.bindValue( ":shared", m.value( "shared" ) );
@@ -111,6 +123,6 @@ DatabaseCommand_CreatePlaylist::createPlaylist( DatabaseImpl* lib, bool dynamic)
         cre.bindValue( ":lastmodified", m.value( "lastmodified", 0 ) );
     }
     qDebug() << "CREATE PLAYLIST:" << cre.boundValues();
-    
+
     cre.exec();
 }

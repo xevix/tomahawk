@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -29,6 +29,7 @@
 #include "query.h"
 #include "result.h"
 
+class QWidget;
 class ScriptResolver : public Tomahawk::ExternalResolver
 {
 Q_OBJECT
@@ -42,6 +43,9 @@ public:
     virtual unsigned int preference() const { return m_preference; }
     virtual unsigned int timeout() const    { return m_timeout; }
 
+    virtual QWidget* configUI() const;
+    virtual void saveConfig();
+
 signals:
     void finished();
 
@@ -54,23 +58,21 @@ private slots:
     void readStdout();
     void cmdExited( int code, QProcess::ExitStatus status );
 
-    void onTimeout( const Tomahawk::query_ptr& query );
-
 private:
     void handleMsg( const QByteArray& msg );
     void sendMsg( const QByteArray& msg );
     void doSetup( const QVariantMap& m );
+    void setupConfWidget( const QVariantMap& m );
 
     QProcess m_proc;
     QString m_name;
     unsigned int m_weight, m_preference, m_timeout, m_num_restarts;
+    QWeakPointer< QWidget > m_configWidget;
 
     quint32 m_msgsize;
     QByteArray m_msg;
 
     bool m_ready, m_stopped;
-
-    QHash< QString /* QID */, unsigned int /* state */ > m_queryState;
 
     QJson::Parser m_parser;
     QJson::Serializer m_serializer;

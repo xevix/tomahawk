@@ -1,10 +1,9 @@
-# only build one of them, if ENABLE_JREEN is true, GLOOX_FOUND is automatically set to "false"
-IF( GLOOX_FOUND )
+IF( LIBJREEN_FOUND )
     ADD_SUBDIRECTORY( jabber )
-ENDIF( GLOOX_FOUND )
-IF( ENABLE_JREEN )
-    ADD_SUBDIRECTORY( jreen )
-ENDIF( ENABLE_JREEN)
+ENDIF( LIBJREEN_FOUND )
 
-ADD_SUBDIRECTORY( twitter )
+IF( QTWEETLIB_FOUND )
+    ADD_SUBDIRECTORY( twitter )
+ENDIF( QTWEETLIB_FOUND )
+
 ADD_SUBDIRECTORY( zeroconf )

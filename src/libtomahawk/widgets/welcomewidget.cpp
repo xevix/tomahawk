@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -19,9 +19,10 @@
 #include "welcomewidget.h"
 #include "ui_welcomewidget.h"
 
+#include "audio/audioengine.h"
 #include "utils/tomahawkutils.h"
 
-#include "playlist/playlistmanager.h"
+#include "viewmanager.h"
 #include "playlist/playlistmodel.h"
 
 #include "widgets/overlaywidget.h"
@@ -30,9 +31,10 @@
 #include "tomahawksettings.h"
 
 #include <QPainter>
+#include "welcomeplaylistmodel.h"
 
-#define HISTORY_TRACK_ITEMS 50
-#define HISTORY_PLAYLIST_ITEMS 10
+#define HISTORY_TRACK_ITEMS 25
+#define HISTORY_PLAYLIST_ITEMS 5
 #define HISTORY_RESOLVING_TIMEOUT 2500
 
 
@@ -42,12 +44,18 @@ WelcomeWidget::WelcomeWidget( QWidget* parent )
 {
     ui->setupUi( this );
 
+    WelcomePlaylistModel* model = new WelcomePlaylistModel( this );
+    model->setMaxPlaylists( HISTORY_PLAYLIST_ITEMS );
+
     ui->playlistWidget->setItemDelegate( new PlaylistDelegate() );
+    ui->playlistWidget->setModel( model );
     ui->playlistWidget->overlay()->resize( 380, 86 );
     ui->tracksView->overlay()->setEnabled( false );
 
+    connect( model, SIGNAL( emptinessChanged( bool) ), this, SLOT( updatePlaylists() ) );
+
     m_tracksModel = new PlaylistModel( ui->tracksView );
-    ui->tracksView->setModel( m_tracksModel );
+    ui->tracksView->setPlaylistModel( m_tracksModel );
     m_tracksModel->loadHistory( Tomahawk::source_ptr(), HISTORY_TRACK_ITEMS );
 
     m_timer = new QTimer( this );
@@ -55,7 +63,8 @@ WelcomeWidget::WelcomeWidget( QWidget* parent )
 
     connect( SourceList::instance(), SIGNAL( sourceAdded( Tomahawk::source_ptr ) ), SLOT( onSourceAdded( Tomahawk::source_ptr ) ) );
 
-    connect( ui->playlistWidget, SIGNAL( itemActivated( QListWidgetItem* ) ), SLOT( onPlaylistActivated( QListWidgetItem* ) ) );
+    connect( ui->playlistWidget, SIGNAL( activated( QModelIndex ) ), SLOT( onPlaylistActivated( QModelIndex ) ) );
+    connect( AudioEngine::instance() ,SIGNAL( playlistChanged( PlaylistInterface* ) ), this, SLOT( updatePlaylists() ), Qt::QueuedConnection );
 }
 
 
@@ -68,20 +77,21 @@ WelcomeWidget::~WelcomeWidget()
 void
 WelcomeWidget::updatePlaylists()
 {
-    ui->playlistWidget->clear();
+//     ui->playlistWidget->clear();
 
-    QList<Tomahawk::playlist_ptr> playlists = TomahawkSettings::instance()->recentlyPlayedPlaylists();
-
+//     QList<Tomahawk::playlist_ptr> playlists = TomahawkSettings::instance()->recentlyPlayedPlaylists();
+/*
     foreach( const Tomahawk::playlist_ptr& playlist, playlists )
     {
-        connect( playlist.data(), SIGNAL( revisionLoaded( Tomahawk::PlaylistRevision ) ), SLOT( updatePlaylists() ) );
+        connect( playlist.data(), SIGNAL( revisionLoaded( Tomahawk::PlaylistRevision ) ), SLOT( refresh() ) );
 
         PlaylistWidgetItem* item = new PlaylistWidgetItem( playlist );
         ui->playlistWidget->addItem( item );
         item->setData( Qt::DisplayRole, playlist->title() );
-    }
+    }*/
 
-    if ( !playlists.count() )
+    int num = ui->playlistWidget->model()->rowCount( QModelIndex() );
+    if ( num == 0 )
     {
         ui->playlistWidget->overlay()->setText( tr( "You have not played any playlists yet." ) );
         ui->playlistWidget->overlay()->show();
@@ -90,13 +100,9 @@ WelcomeWidget::updatePlaylists()
         ui->playlistWidget->overlay()->hide();
 }
 
-
 void
 WelcomeWidget::onSourceAdded( const Tomahawk::source_ptr& source )
 {
-    connect( source->collection().data(), SIGNAL( playlistsAdded( QList<Tomahawk::playlist_ptr> ) ), SLOT( updatePlaylists() ) );
-    connect( source->collection().data(), SIGNAL( playlistsDeleted( QList<Tomahawk::playlist_ptr> ) ), SLOT( updatePlaylists() ) );
-
     connect( source.data(), SIGNAL( playbackFinished( Tomahawk::query_ptr ) ), SLOT( onPlaybackFinished( Tomahawk::query_ptr ) ) );
 }
 
@@ -124,15 +130,15 @@ WelcomeWidget::onPlaybackFinished( const Tomahawk::query_ptr& query )
 
 
 void
-WelcomeWidget::onPlaylistActivated( QListWidgetItem* item )
+WelcomeWidget::onPlaylistActivated( const QModelIndex& item )
 {
     qDebug() << Q_FUNC_INFO;
 
-    PlaylistWidgetItem* pwi = dynamic_cast<PlaylistWidgetItem*>(item);
-    if( Tomahawk::dynplaylist_ptr dynplaylist = pwi->playlist().dynamicCast< Tomahawk::DynamicPlaylist >() )
-        PlaylistManager::instance()->show( dynplaylist );
+    Tomahawk::playlist_ptr pl = item.data( WelcomePlaylistModel::PlaylistRole ).value< Tomahawk::playlist_ptr >();
+    if( Tomahawk::dynplaylist_ptr dynplaylist = pl.dynamicCast< Tomahawk::DynamicPlaylist >() )
+        ViewManager::instance()->show( dynplaylist );
     else
-        PlaylistManager::instance()->show( pwi->playlist() );
+        ViewManager::instance()->show( pl );
 }
 
 
@@ -151,45 +157,11 @@ WelcomeWidget::changeEvent( QEvent* e )
     }
 }
 
-
-QVariant
-PlaylistWidgetItem::data( int role ) const
-{
-    if ( role == ArtistRole )
-    {
-        if ( m_artists.isEmpty() )
-        {
-            QStringList artists;
-
-            foreach( const Tomahawk::plentry_ptr& entry, m_playlist->entries() )
-            {
-                if ( !artists.contains( entry->query()->artist() ) )
-                    artists << entry->query()->artist();
-            }
-
-            m_artists = artists.join( ", " );
-        }
-
-        return m_artists;
-    }
-
-    if ( role == TrackCountRole )
-    {
-        return m_playlist->entries().count();
-    }
-
-    if ( role == Qt::DisplayRole )
-    {
-        return m_playlist->title();
-    }
-
-    return QListWidgetItem::data( role );
-}
-
-
 QSize
 PlaylistDelegate::sizeHint( const QStyleOptionViewItem& option, const QModelIndex& index ) const
 {
+    Q_UNUSED( option );
+    Q_UNUSED( index );
     return QSize( 0, 64 );
 }
 
@@ -218,9 +190,9 @@ PlaylistDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, 
 
     painter->drawPixmap( option.rect.adjusted( 10, 13, -option.rect.width() + 48, -13 ), m_playlistIcon );
 
-    painter->drawText( option.rect.adjusted( 56, 26, -100, -8 ), index.data( PlaylistWidgetItem::ArtistRole ).toString() );
+    painter->drawText( option.rect.adjusted( 56, 26, -100, -8 ), index.data( WelcomePlaylistModel::ArtistRole ).toString() );
 
-    QString trackCount = tr( "%1 tracks" ).arg( index.data( PlaylistWidgetItem::TrackCountRole ).toString() );
+    QString trackCount = tr( "%1 tracks" ).arg( index.data( WelcomePlaylistModel::TrackCountRole ).toString() );
     painter->drawText( option.rect.adjusted( option.rect.width() - 96, 2, 0, -2 ), trackCount, to );
 
     painter->setFont( boldFont );
@@ -231,7 +203,7 @@ PlaylistDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, 
 
 
 PlaylistWidget::PlaylistWidget( QWidget* parent )
-    : QListWidget( parent )
+    : QListView( parent )
 {
     m_overlay = new OverlayWidget( this );
 }

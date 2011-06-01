@@ -29,11 +29,18 @@
 
 using namespace Tomahawk;
 
+void
+XSPFLoader::setOverrideTitle( const QString& newTitle )
+{
+    m_overrideTitle = newTitle;
+}
+
 
 void
 XSPFLoader::load( const QUrl& url )
 {
     QNetworkRequest request( url );
+    Q_ASSERT( TomahawkUtils::nam() != 0 );
     QNetworkReply* reply = TomahawkUtils::nam()->get( request );
 
     // isn't there a race condition here? something could happen before we connect()
@@ -116,15 +123,18 @@ XSPFLoader::gotBody()
     m_title = origTitle;
     if ( m_title.isEmpty() )
         m_title = tr( "New Playlist" );
+    if( !m_overrideTitle.isEmpty() )
+        m_title = m_overrideTitle;
 
     bool shownError = false;
     for ( unsigned int i = 0; i < tracklist.length(); i++ )
     {
         QDomNode e = tracklist.at( i );
 
-        QString artist, album, track, duration, annotation;
+        QString artist, album, track, duration, annotation, url;
         QDomElement n = e.firstChildElement();
-        for ( ; !n.isNull(); n = n.nextSiblingElement() ) {
+        for ( ; !n.isNull(); n = n.nextSiblingElement() )
+        {
             if (n.namespaceURI() == m_NS && n.localName() == "duration") {
                 duration = n.text();
             } else if (n.namespaceURI() == m_NS && n.localName() == "annotation") {
@@ -135,26 +145,27 @@ XSPFLoader::gotBody()
                 album = n.text();
             } else if (n.namespaceURI() == m_NS && n.localName() == "title") {
                 track = n.text();
+            } else if (n.namespaceURI() == m_NS && n.localName() == "url") {
+                url = n.text();
             }
         }
 
-        if( artist.isEmpty() || track.isEmpty() ) {
-            if( !shownError ) {
+        if( artist.isEmpty() || track.isEmpty() )
+        {
+            if( !shownError )
+            {
                 QMessageBox::warning( 0, tr( "Failed to save tracks" ), tr( "Some tracks in the playlist do not contain an artist and a title. They will be ignored." ), QMessageBox::Ok );
                 shownError = true;
             }
             continue;
         }
 
-        plentry_ptr p( new PlaylistEntry );
-        p->setGuid( uuid() );
-        p->setDuration( duration.toInt() / 1000 );
-        p->setLastmodified( 0 );
-        p->setAnnotation( annotation );
+        query_ptr q = Tomahawk::Query::get( artist, track, album, uuid() );
+        q->setDuration( duration.toInt() / 1000 );
+        if( !url.isEmpty() )
+            q->setResultHint( url );
 
-        p->setQuery( Tomahawk::Query::get( artist, track, album, uuid() ) );
-        p->query()->setDuration( duration.toInt() / 1000 );
-        m_entries << p;
+        m_entries << q;
     }
 
     if ( origTitle.isEmpty() && m_entries.isEmpty() )
@@ -179,9 +190,9 @@ XSPFLoader::gotBody()
                                        m_title,
                                        m_info,
                                        m_creator,
-                                       false );
+                                       false,
+                                       m_entries );
 
-        m_playlist->createNewRevision( uuid(), m_playlist->currentrevision(), m_entries );
         deleteLater();
     }
 

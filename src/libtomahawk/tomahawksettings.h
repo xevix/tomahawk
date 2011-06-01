@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -41,17 +41,20 @@ public:
     void applyChanges() { emit changed(); }
 
     /// General settings
-    QString scannerPath() const; /// QDesktopServices::MusicLocation by default
-    void setScannerPath( const QString& path );
-    bool hasScannerPath() const;
-    
+    QStringList scannerPaths(); /// QDesktopServices::MusicLocation by default
+    void setScannerPaths( const QStringList& paths );
+    bool hasScannerPaths() const;
+
+    bool watchForChanges() const;
+    void setWatchForChanges( bool watch );
+
     bool acceptedLegalWarning() const;
     void setAcceptedLegalWarning( bool accept );
-    
+
     /// UI settings
     QByteArray mainWindowGeometry() const;
     void setMainWindowGeometry( const QByteArray& geom );
-    
+
     QByteArray mainWindowState() const;
     void setMainWindowState( const QByteArray& state );
 
@@ -63,29 +66,31 @@ public:
     void setPlaylistColumnSizes( const QString& playlistid, const QByteArray& state );
 
     QList<Tomahawk::playlist_ptr> recentlyPlayedPlaylists() const;
+    QStringList recentlyPlayedPlaylistGuids( unsigned int amount = 0 ) const;
     void appendRecentlyPlayedPlaylist( const Tomahawk::playlist_ptr& playlist );
 
-    /// Jabber settings
-    bool jabberAutoConnect() const; /// true by default
-    void setJabberAutoConnect( bool autoconnect = false );
-    
-    QString jabberUsername() const;
-    void setJabberUsername( const QString& username );
-    
-    QString jabberPassword() const;
-    void setJabberPassword( const QString& pw );
-    
-    QString jabberServer() const;
-    void setJabberServer( const QString& server );
-    
-    unsigned int jabberPort() const; // default is 5222
-    void setJabberPort( int port );
-    
+    /// SIP plugins
+    // all plugins we know about. loaded, unloaded, enabled, disabled.
+    void setSipPlugins( const QStringList& plugins );
+    QStringList sipPlugins() const;
+
+    void setBookmarkPlaylist( const QString& guid );
+    QString bookmarkPlaylist() const;
+
+    // just the enabled sip plugins.
+    void setEnabledSipPlugins( const QStringList& list );
+    QStringList enabledSipPlugins() const;
+    void enableSipPlugin( const QString& pluginId );
+    void disableSipPlugin( const QString& pluginId );
+
+    void addSipPlugin( const QString& pluginId, bool enable = true );
+    void removeSipPlugin( const QString& pluginId );
+
     /// Network settings
     enum ExternalAddressMode { Lan, Upnp };
     ExternalAddressMode externalAddressMode() const;
     void setExternalAddressMode( ExternalAddressMode externalAddressMode );
-    
+
     bool preferStaticHostPort() const;
     void setPreferStaticHostPort( bool prefer );
 
@@ -101,7 +106,10 @@ public:
 
     QString proxyHost() const;
     void setProxyHost( const QString &host );
-
+    
+    QString proxyNoProxyHosts() const;
+    void setProxyNoProxyHosts( const QString &hosts );
+    
     qulonglong proxyPort() const;
     void setProxyPort( const qulonglong port );
 
@@ -114,41 +122,26 @@ public:
     int proxyType() const;
     void setProxyType( const int type );
 
+    bool proxyDns() const;
+    void setProxyDns( bool lookupViaProxy );
+
+    /// ACL settings
+    QStringList aclEntries() const;
+    void setAclEntries( const QStringList &entries );
+
     /// Last.fm settings
     bool scrobblingEnabled() const; /// false by default
     void setScrobblingEnabled( bool enable );
-    
+
     QString lastFmUsername() const;
     void setLastFmUsername( const QString& username );
-    
+
     QString lastFmPassword() const;
     void setLastFmPassword( const QString& password );
-    
+
     QByteArray lastFmSessionKey() const;
     void setLastFmSessionKey( const QByteArray& key );
-    
-    /// Twitter settings
-    QString twitterScreenName() const;
-    void setTwitterScreenName( const QString& screenName );
-    
-    QString twitterOAuthToken() const;
-    void setTwitterOAuthToken( const QString& oauthtoken );
-    
-    QString twitterOAuthTokenSecret() const;
-    void setTwitterOAuthTokenSecret( const QString& oauthtokensecret );
 
-    qint64 twitterCachedFriendsSinceId() const;
-    void setTwitterCachedFriendsSinceId( qint64 sinceid );
-    
-    qint64 twitterCachedMentionsSinceId() const;
-    void setTwitterCachedMentionsSinceId( qint64 sinceid );
-    
-    qint64 twitterCachedDirectMessagesSinceId() const;
-    void setTwitterCachedDirectMessagesSinceId( qint64 sinceid );
-    
-    QHash<QString, QVariant> twitterCachedPeers() const;
-    void setTwitterCachedPeers( const QHash<QString, QVariant> &cachedPeers );
-    
     /// XMPP Component Settings
     QString xmppBotServer() const;
     void setXmppBotServer( const QString &server );
@@ -161,16 +154,23 @@ public:
 
     int xmppBotPort() const;
     void setXmppBotPort( const int port );
-    
+
     /// Script resolver settings
-    QStringList scriptResolvers() const;
-    void setScriptResolvers( const QStringList& resolver );
+    QStringList allScriptResolvers() const;
+    void setAllScriptResolvers( const QStringList& resolvers );
     void addScriptResolver( const QString& resolver );
+    QStringList enabledScriptResolvers() const;
+    void setEnabledScriptResolvers( const QStringList& resolvers );
+
 
 signals:
     void changed();
+    void recentlyPlayedPlaylistAdded( const Tomahawk::playlist_ptr& playlist );
 
 private:
+    void doInitialSetup();
+    void doUpgrade( int oldVersion, int newVersion );
+
     static TomahawkSettings* s_instance;
 };
 

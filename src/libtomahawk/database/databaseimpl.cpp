@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -30,6 +30,7 @@
 #include "result.h"
 #include "artist.h"
 #include "album.h"
+#include "utils/tomahawkutils.h"
 
 /* !!!! You need to manually generate schema.sql.h when the schema changes:
     cd src/libtomahawk/database
@@ -37,7 +38,7 @@
 */
 #include "schema.sql.h"
 
-#define CURRENT_SCHEMA_VERSION 22
+#define CURRENT_SCHEMA_VERSION 23
 
 
 DatabaseImpl::DatabaseImpl( const QString& dbname, Database* parent )
@@ -46,8 +47,6 @@ DatabaseImpl::DatabaseImpl( const QString& dbname, Database* parent )
     , m_lastalbid( 0 )
     , m_lasttrkid( 0 )
 {
-    connect( this, SIGNAL( indexReady() ), parent, SIGNAL( indexReady() ) );
-
     db = QSqlDatabase::addDatabase( "QSQLITE", "tomahawk" );
     db.setDatabaseName( dbname );
     if ( !db.open() )
@@ -65,21 +64,22 @@ DatabaseImpl::DatabaseImpl( const QString& dbname, Database* parent )
         int v = qry.value( 0 ).toInt();
         qDebug() << "Current schema is" << v << this->thread();
         if ( v != CURRENT_SCHEMA_VERSION )
-        {  
+        {
 
             QString newname = QString("%1.v%2").arg(dbname).arg(v);
             qDebug() << endl << "****************************" << endl;
             qDebug() << "Schema version too old: " << v << ". Current version is:" << CURRENT_SCHEMA_VERSION;
             qDebug() << "Moving" << dbname << newname;
+            qDebug() << "If the migration fails, you can recover your DB by copying" << newname << "back to" << dbname;
             qDebug() << endl << "****************************" << endl;
 
             qry.clear();
             qry.finish();
-            
+
             db.close();
             db.removeDatabase( "tomahawk" );
 
-            if( QFile::rename( dbname, newname ) )
+            if( QFile::copy( dbname, newname ) )
             {
                 db = QSqlDatabase::addDatabase( "QSQLITE", "tomahawk" );
                 db.setDatabaseName( dbname );
@@ -89,6 +89,13 @@ DatabaseImpl::DatabaseImpl( const QString& dbname, Database* parent )
                 TomahawkSqlQuery query = newquery();
                 query.exec( "PRAGMA auto_vacuum = FULL" );
                 schemaUpdated = updateSchema( v );
+
+                if( !schemaUpdated )
+                {
+                    Q_ASSERT( false );
+                    QTimer::singleShot( 0, qApp, SLOT( quit() ) );
+                }
+
             }
             else
             {
@@ -151,26 +158,73 @@ DatabaseImpl::updateSearchIndex()
 
 
 bool
-DatabaseImpl::updateSchema( int currentver )
+DatabaseImpl::updateSchema( int oldVersion )
 {
-    qDebug() << "Create tables... old version is" << currentver;
-    QString sql( get_tomahawk_sql() );
-    QStringList statements = sql.split( ";", QString::SkipEmptyParts );
-    db.transaction();
-
-    foreach( const QString& sl, statements )
+    // we are called here with the old database. we must migrate it to the CURRENT_SCHEMA_VERSION from the oldVersion
+    if ( oldVersion == 0 ) // empty database, so create our tables and stuff
     {
-        QString s( sl.trimmed() );
-        if( s.length() == 0 )
-            continue;
+        qDebug() << "Create tables... old version is" << oldVersion;
+        QString sql( get_tomahawk_sql() );
+        QStringList statements = sql.split( ";", QString::SkipEmptyParts );
+        db.transaction();
 
-        qDebug() << "Executing:" << s;
-        TomahawkSqlQuery query = newquery();
-        query.exec( s );
+        foreach( const QString& sl, statements )
+        {
+            QString s( sl.trimmed() );
+            if( s.length() == 0 )
+                continue;
+
+            qDebug() << "Executing:" << s;
+            TomahawkSqlQuery query = newquery();
+            query.exec( s );
+        }
+
+        db.commit();
+        return true;
     }
+    else // update in place! run the proper upgrade script
+    {
+        int cur = oldVersion;
+        db.transaction();
+        while ( cur < CURRENT_SCHEMA_VERSION )
+        {
+            cur++;
 
-    db.commit();
-    return true;
+            QString path = QString( RESPATH "sql/dbmigrate-%1_to_%2.sql" ).arg( cur - 1 ).arg( cur );
+            QFile script( path );
+            if( !script.exists() || !script.open( QIODevice::ReadOnly ) )
+            {
+                qWarning() << "Failed to find or open upgrade script from" << (cur-1) << "to" << cur << " (" << path << ")! Aborting upgrade..";
+                return false;
+            }
+
+            QString sql = QString::fromUtf8( script.readAll() ).trimmed();
+            QStringList statements = sql.split( ";", QString::SkipEmptyParts );
+            foreach( const QString& sql, statements )
+            {
+                QString clean = cleanSql( sql ).trimmed();
+                if( clean.isEmpty() )
+                    continue;
+
+                qDebug() << "Executing upgrade statement:" << clean;
+                TomahawkSqlQuery q = newquery();
+                q.exec( clean );
+            }
+        }
+        db.commit();
+        qDebug() << "DB Upgrade successful!";
+        return true;
+    }
+}
+
+
+QString
+DatabaseImpl::cleanSql( const QString& sql )
+{
+    QString fixed = sql;
+    QRegExp r( "--[^\\n]*" );
+    fixed.replace( r, QString() );
+    return fixed.trimmed();
 }
 
 
@@ -371,6 +425,7 @@ DatabaseImpl::albumId( int artistid, const QString& name_orig, bool& isnew )
 QList< int >
 DatabaseImpl::searchTable( const QString& table, const QString& name, uint limit )
 {
+    Q_UNUSED( limit );
     QList< int > results;
     if( table != "artist" && table != "track" && table != "album" )
         return results;
@@ -473,8 +528,9 @@ DatabaseImpl::album( int id )
 
 
 Tomahawk::result_ptr
-DatabaseImpl::result( const QString& url )
+DatabaseImpl::resultFromHint( const Tomahawk::query_ptr& origquery )
 {
+    QString url = origquery->resultHint();
     TomahawkSqlQuery query = newquery();
     Tomahawk::source_ptr s;
     Tomahawk::result_ptr res;
@@ -498,6 +554,18 @@ DatabaseImpl::result( const QString& url )
     {
 //        Q_ASSERT( false );
         qDebug() << "We don't support non-servent / non-file result-hints yet.";
+/*        res = Tomahawk::result_ptr( new Tomahawk::Result() );
+        s = SourceList::instance()->webSource();
+        res->setUrl( url );
+        res->setCollection( s->collection() );
+        res->setRID( uuid() );
+        res->setScore( 1.0 );
+        res->setArtist( Tomahawk::artist_ptr( new Tomahawk::Artist( 0, origquery->artist() ) ) );
+        res->setAlbum( Tomahawk::album_ptr( new Tomahawk::Album( 0, origquery->album(), res->artist() ) ) );
+        res->setTrack( origquery->track() );
+        res->setDuration( origquery->duration() );
+        res->setFriendlySource( url );*/
+
         return res;
     }
 
@@ -512,14 +580,16 @@ DatabaseImpl::result( const QString& url )
                             "file.source, "
                             "file_join.albumpos, "
                             "artist.id as artid, "
-                            "album.id as albid "
-                            "FROM file, file_join, artist, track "
+                            "album.id as albid, "
+                            "track_attributes.v as year "
+                            "FROM file, file_join, artist, track, track_attributes "
                             "LEFT JOIN album ON album.id = file_join.album "
                             "WHERE "
                             "artist.id = file_join.artist AND "
                             "track.id = file_join.track AND "
                             "file.source %1 AND "
                             "file_join.file = file.id AND "
+                            "file.id = track_attributes.id AND "
                             "file.url = ?"
         ).arg( searchlocal ? "IS NULL" : QString( "= %1" ).arg( s->id() ) );
 
@@ -564,6 +634,7 @@ DatabaseImpl::result( const QString& url )
         res->setRID( uuid() );
         res->setId( query.value( 9 ).toUInt() );
         res->setCollection( s->collection() );
+        res->setYear( query.value( 17 ).toUInt() );
     }
 
     return res;

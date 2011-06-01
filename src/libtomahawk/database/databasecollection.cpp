@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -23,7 +23,8 @@
 #include "databasecommand_addfiles.h"
 #include "databasecommand_deletefiles.h"
 #include "databasecommand_loadallplaylists.h"
-#include "databasecommand_loadalldynamicplaylists.h"
+#include "databasecommand_loadallautoplaylists.h"
+#include "databasecommand_loadallstations.h"
 
 using namespace Tomahawk;
 
@@ -37,7 +38,6 @@ DatabaseCollection::DatabaseCollection( const source_ptr& src, QObject* parent )
 void
 DatabaseCollection::loadPlaylists()
 {
-    qDebug() << Q_FUNC_INFO;
     DatabaseCommand_LoadAllPlaylists* cmd = new DatabaseCommand_LoadAllPlaylists( source() );
 
     connect( cmd,  SIGNAL( done( const QList<Tomahawk::playlist_ptr>& ) ),
@@ -48,16 +48,26 @@ DatabaseCollection::loadPlaylists()
 
 
 void
-DatabaseCollection::loadDynamicPlaylists()
+DatabaseCollection::loadAutoPlaylists()
 {
-    qDebug() << Q_FUNC_INFO;
-    DatabaseCommand_LoadAllDynamicPlaylists* cmd = new DatabaseCommand_LoadAllDynamicPlaylists( source() );
-    
-    connect( cmd, SIGNAL( playlistLoaded( Tomahawk::source_ptr, QVariantList ) ),
-                    SLOT( dynamicPlaylistCreated( const Tomahawk::source_ptr&, const QVariantList& ) ) );
-    
+    DatabaseCommand_LoadAllAutoPlaylists* cmd = new DatabaseCommand_LoadAllAutoPlaylists( source() );
+
+    connect( cmd, SIGNAL( autoPlaylistLoaded( Tomahawk::source_ptr, QVariantList ) ),
+                    SLOT( autoPlaylistCreated( const Tomahawk::source_ptr&, const QVariantList& ) ) );
+
     Database::instance()->enqueue( QSharedPointer<DatabaseCommand>( cmd ) );
 }
+
+
+void
+DatabaseCollection::loadStations()
+{
+    DatabaseCommand_LoadAllStations* cmd = new DatabaseCommand_LoadAllStations( source() );
+
+    connect( cmd, SIGNAL( stationLoaded( Tomahawk::source_ptr, QVariantList ) ),
+             SLOT( stationCreated( const Tomahawk::source_ptr&, const QVariantList& ) ) );
+
+    Database::instance()->enqueue( QSharedPointer<DatabaseCommand>( cmd ) );}
 
 
 void
@@ -68,7 +78,7 @@ DatabaseCollection::loadTracks()
     setLoaded();
     DatabaseCommand_AllTracks* cmd = new DatabaseCommand_AllTracks( source()->collection() );
 
-    connect( cmd, SIGNAL( tracks( QList<Tomahawk::query_ptr> ) ),
+    connect( cmd, SIGNAL( tracks( QList<Tomahawk::query_ptr>, QVariant ) ),
                     SLOT( setTracks( QList<Tomahawk::query_ptr> ) ) );
 
     Database::instance()->enqueue( QSharedPointer<DatabaseCommand>( cmd ) );
@@ -98,8 +108,6 @@ DatabaseCollection::removeTracks( const QDir& dir )
 QList< Tomahawk::playlist_ptr >
 DatabaseCollection::playlists()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if ( Collection::playlists().isEmpty() )
     {
         loadPlaylists();
@@ -109,24 +117,33 @@ DatabaseCollection::playlists()
 }
 
 
-QList< dynplaylist_ptr > DatabaseCollection::dynamicPlaylists()
+QList< dynplaylist_ptr >
+DatabaseCollection::autoPlaylists()
 {
-    qDebug() << Q_FUNC_INFO;
-    
-    if ( Collection::dynamicPlaylists().isEmpty() )
+    if ( Collection::autoPlaylists().isEmpty() )
     {
-        loadDynamicPlaylists();
+        loadAutoPlaylists();
     }
-    
-    return Collection::dynamicPlaylists();
+
+    return Collection::autoPlaylists();
+}
+
+
+QList< dynplaylist_ptr >
+DatabaseCollection::stations()
+{
+    if ( Collection::stations().isEmpty() )
+    {
+        loadStations();
+    }
+
+    return Collection::stations();
 }
 
 
 QList< Tomahawk::query_ptr >
 DatabaseCollection::tracks()
 {
-    qDebug() << Q_FUNC_INFO;
-
     if ( !isLoaded() )
     {
         loadTracks();
@@ -136,18 +153,37 @@ DatabaseCollection::tracks()
 }
 
 
-void DatabaseCollection::dynamicPlaylistCreated( const source_ptr& source, const QVariantList& data )
+void DatabaseCollection::autoPlaylistCreated( const source_ptr& source, const QVariantList& data )
 {
     dynplaylist_ptr p( new DynamicPlaylist( source,                  //src
                                             data[0].toString(),  //current rev
                                             data[1].toString(),  //title
                                             data[2].toString(),  //info
                                             data[3].toString(),  //creator
-                                            data[4].toString(),  // dynamic type
-                                            static_cast<GeneratorMode>(data[5].toInt()),  // dynamic mode
-                                            data[6].toBool(),    //shared
-                                            data[7].toInt(),     //lastmod
-                                            data[8].toString() ) );  //GUID
-    addDynamicPlaylist( p );
+                                            data[4].toUInt(),  // createdOn
+                                            data[5].toString(),  // dynamic type
+                                            static_cast<GeneratorMode>(data[6].toInt()),  // dynamic mode
+                                            data[7].toBool(),    //shared
+                                            data[8].toInt(),     //lastmod
+                                            data[9].toString() ) );  //GUID
+    addAutoPlaylist( p );
 }
+
+
+void DatabaseCollection::stationCreated( const source_ptr& source, const QVariantList& data )
+{
+    dynplaylist_ptr p( new DynamicPlaylist( source,                  //src
+                                            data[0].toString(),  //current rev
+                                            data[1].toString(),  //title
+                                            data[2].toString(),  //info
+                                            data[3].toString(),  //creator
+                                            data[4].toUInt(),  // createdOn
+                                            data[5].toString(),  // dynamic type
+                                            static_cast<GeneratorMode>(data[6].toInt()),  // dynamic mode
+                                            data[7].toBool(),    //shared
+                                            data[8].toInt(),     //lastmod
+                                            data[9].toString() ) );  //GUID
+    addStation( p );
+}
+
 

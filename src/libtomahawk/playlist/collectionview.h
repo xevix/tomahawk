@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -36,7 +36,8 @@ public:
     explicit CollectionView( QWidget* parent = 0 );
     ~CollectionView();
 
-    virtual void setModel( TrackModel* model );
+    virtual void setTrackModel( TrackModel* model );
+    virtual void setModel( QAbstractItemModel* model );
 
     virtual QWidget* widget() { return this; }
     virtual PlaylistInterface* playlistInterface() const { return proxyModel(); }
@@ -44,8 +45,9 @@ public:
     virtual QString title() const { return model()->title(); }
     virtual QString description() const { return model()->description(); }
     virtual QPixmap pixmap() const { return QPixmap( RESPATH "images/music-icon.png" ); }
-    
+
     virtual bool showModes() const { return true; }
+    virtual bool showFilter() const { return true; }
 
     virtual bool jumpToCurrentTrack();
 

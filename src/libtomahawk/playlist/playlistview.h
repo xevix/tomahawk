@@ -39,18 +39,23 @@ public:
     ~PlaylistView();
 
     PlaylistModel* playlistModel() const { return m_model; }
-    virtual void setModel( PlaylistModel* model );
+    virtual void setPlaylistModel( PlaylistModel* model );
+    virtual void setModel( QAbstractItemModel* model );
 
     virtual QWidget* widget() { return this; }
     virtual PlaylistInterface* playlistInterface() const { return proxyModel(); }
+
+    virtual bool showFilter() const { return true; }
 
     virtual QString title() const { return playlistModel()->title(); }
     virtual QString description() const { return m_model->description(); }
     virtual QPixmap pixmap() const { return QPixmap( RESPATH "images/playlist-icon.png" ); }
 
     virtual bool jumpToCurrentTrack();
+    virtual bool isTemporaryPage() const;
 
 signals:
+    void nameChanged( const QString& title );
     void destroyed( QWidget* widget );
 
 protected:
@@ -64,13 +69,15 @@ private slots:
     void deleteItems();
 
     void onDeleted();
-
+    void onChanged();
 private:
     void setupMenus();
 
     PlaylistModel* m_model;
 
     QMenu m_itemMenu;
+    QString m_customTitle;
+    QString m_customDescripton;
 
     QAction* m_playItemAction;
     QAction* m_addItemsToQueueAction;

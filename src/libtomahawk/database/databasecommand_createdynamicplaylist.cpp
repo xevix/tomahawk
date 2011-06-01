@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include "dynamic/GeneratorInterface.h"
 
 #include "network/servent.h"
-#include "playlist/playlistmanager.h"
+#include "viewmanager.h"
 
 using namespace Tomahawk;
 
@@ -53,15 +53,16 @@ DatabaseCommand_CreateDynamicPlaylist::exec( DatabaseImpl* lib )
     qDebug() << Q_FUNC_INFO;
     Q_ASSERT( !( m_playlist.isNull() && m_v.isNull() ) );
     Q_ASSERT( !source().isNull() );
-    
+
     DatabaseCommand_CreatePlaylist::createPlaylist( lib, true );
     qDebug() << "Created normal playlist, now creating additional dynamic info!";
-    
+
+    qDebug() << "Create dynamic execing!" << m_playlist << m_v;
     TomahawkSqlQuery cre = lib->newquery();
 
     cre.prepare( "INSERT INTO dynamic_playlist( guid, pltype, plmode ) "
                  "VALUES( ?, ?, ? )" );
-    
+
     if( m_playlist.isNull() ) {
         QVariantMap m = m_v.toMap();
         cre.addBindValue( m.value( "guid" ) );
@@ -73,22 +74,6 @@ DatabaseCommand_CreateDynamicPlaylist::exec( DatabaseImpl* lib )
         cre.addBindValue( m_playlist->mode() );
     }
     cre.exec();
-    
-    // save the controls -- wait, no controls in a new playlist :P
-//     cre = lib->newquery();
-//     cre.prepare( "INSERT INTO dynamic_playlist_controls( id, selectedType, match, input) "
-//                  "VALUES( :id, :selectedType, :match, :input )" );
-//     foreach( const dyncontrol_ptr& control, m_playlist->generator()->controls() ) {
-//     
-//         cre.bindValue( ":id", control->id() );
-//         cre.bindValue( ":selectedType", control->selectedType() );
-//         cre.bindValue( ":match", control->match() );
-//         cre.bindValue( ":input", control->input() );
-//         
-//         qDebug() << "CREATE DYNPLAYLIST CONTROL:" << cre.boundValues();
-//         
-//         cre.exec();
-//     }
 }
 
 
@@ -101,14 +86,14 @@ DatabaseCommand_CreateDynamicPlaylist::postCommitHook()
         qDebug() << "Source has gone offline, not emitting to GUI.";
         return;
     }
-    
+
     if( report() == false )
         return;
-    
+
     qDebug() << Q_FUNC_INFO << "..reporting..";
     if( m_playlist.isNull() ) {
         source_ptr src = source();
-        QMetaObject::invokeMethod( PlaylistManager::instance(),
+        QMetaObject::invokeMethod( ViewManager::instance(),
                                    "createDynamicPlaylist",
                                    Qt::BlockingQueuedConnection,
                                    QGenericArgument( "Tomahawk::source_ptr", (const void*)&src ),

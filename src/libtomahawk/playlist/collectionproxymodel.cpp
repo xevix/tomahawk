@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -23,7 +23,6 @@
 
 #include "album.h"
 #include "query.h"
-#include "collectionmodel.h"
 
 
 CollectionProxyModel::CollectionProxyModel( QObject* parent )
@@ -35,8 +34,8 @@ CollectionProxyModel::CollectionProxyModel( QObject* parent )
 bool
 CollectionProxyModel::lessThan( const QModelIndex& left, const QModelIndex& right ) const
 {
-    PlItem* p1 = itemFromIndex( left );
-    PlItem* p2 = itemFromIndex( right );
+    TrackModelItem* p1 = itemFromIndex( left );
+    TrackModelItem* p2 = itemFromIndex( right );
 
     if ( !p1 )
         return true;
@@ -45,11 +44,6 @@ CollectionProxyModel::lessThan( const QModelIndex& left, const QModelIndex& righ
 
     const Tomahawk::query_ptr& q1 = p1->query();
     const Tomahawk::query_ptr& q2 = p2->query();
-
-    if ( q1.isNull() || q2.isNull() )
-    {
-        return QString::localeAwareCompare( p1->caption, p2->caption ) < 0;
-    }
 
     QString artist1 = q1->artist();
     QString artist2 = q2->artist();

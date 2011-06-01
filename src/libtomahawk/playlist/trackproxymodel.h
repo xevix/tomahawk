@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -34,7 +34,8 @@ public:
     explicit TrackProxyModel ( QObject* parent = 0 );
 
     virtual TrackModel* sourceModel() const { return m_model; }
-    virtual void setSourceModel( TrackModel* sourceModel );
+    virtual void setSourceTrackModel( TrackModel* sourceModel );
+    virtual void setSourceModel( QAbstractItemModel* model );
 
     virtual QPersistentModelIndex currentItem() const { return mapFromSource( m_model->currentItem() ); }
     virtual void setCurrentItem( const QModelIndex& index ) { m_model->setCurrentItem( mapToSource( index ) ); }
@@ -59,7 +60,7 @@ public:
     bool showOfflineResults() const { return m_showOfflineResults; }
     void setShowOfflineResults( bool b ) { m_showOfflineResults = b; }
 
-    PlItem* itemFromIndex( const QModelIndex& index ) const { return sourceModel()->itemFromIndex( index ); }
+    TrackModelItem* itemFromIndex( const QModelIndex& index ) const { return sourceModel()->itemFromIndex( index ); }
 
 signals:
     void repeatModeChanged( PlaylistInterface::RepeatMode mode );

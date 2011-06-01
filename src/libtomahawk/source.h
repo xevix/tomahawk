@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -31,7 +31,6 @@
 
 class DatabaseCommand_LogPlayback;
 class ControlConnection;
-class FileTransferConnection;
 
 namespace Tomahawk
 {
@@ -54,7 +53,10 @@ public:
 
     QString userName() const { return m_username; }
     QString friendlyName() const;
-    void setFriendlyName( const QString& fname ) { m_friendlyname = fname; }
+    void setFriendlyName( const QString& fname );
+
+    void setAvatar( const QPixmap& avatar );
+    QPixmap avatar() const;
 
     collection_ptr collection() const;
     void addCollection( const Tomahawk::collection_ptr& c );
@@ -66,11 +68,11 @@ public:
 
     void scanningProgress( unsigned int files );
     void scanningFinished( unsigned int files );
-    
+
     void setOffline();
     void setOnline();
 
-    unsigned int trackCount() const { return m_stats.value( "numfiles" ).toUInt(); }
+    unsigned int trackCount() const;
 
     Tomahawk::query_ptr currentTrack() const { return m_currentTrack; }
     QString textStatus() const { return m_textStatus; }
@@ -103,7 +105,8 @@ private slots:
     void onStateChanged( DBSyncConnection::State newstate, DBSyncConnection::State oldstate, const QString& info );
     void onPlaybackStarted( const Tomahawk::query_ptr& query );
     void onPlaybackFinished( const Tomahawk::query_ptr& query );
-    
+    void trackTimerFired();
+
 private:
     bool m_isLocal;
     bool m_online;
@@ -112,12 +115,15 @@ private:
     QList< QSharedPointer<Collection> > m_collections;
     QVariantMap m_stats;
     QString m_lastOpGuid;
+    bool m_scrubFriendlyName;
 
     Tomahawk::query_ptr m_currentTrack;
     QString m_textStatus;
+    QTimer m_currentTrackTimer;
 
     ControlConnection* m_cc;
-    FileTransferConnection* m_ftc;
+
+    QPixmap* m_avatar;
 };
 
 };

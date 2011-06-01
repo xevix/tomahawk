@@ -34,7 +34,7 @@
 #include "ReadOrWriteWidget.h"
 #include "CollapsibleControls.h"
 #include "DynamicControlWrapper.h"
-#include "playlistmanager.h"
+#include "viewmanager.h"
 #include "dynamic/DynamicView.h"
 #include <qevent.h>
 #include "DynamicSetupWidget.h"
@@ -65,7 +65,7 @@ DynamicWidget::DynamicWidget( const Tomahawk::dynplaylist_ptr& playlist, QWidget
 
     m_model = new DynamicModel( this );
     m_view = new DynamicView( this );
-    m_view->setModel( m_model );
+    m_view->setDynamicModel( m_model );
     m_view->setContentsMargins( 0, 0, 0, 0 );
     m_layout->addWidget( m_view, 1 );
 
@@ -138,6 +138,7 @@ DynamicWidget::loadDynamicPlaylist( const Tomahawk::dynplaylist_ptr& playlist )
         disconnect( m_playlist.data(), SIGNAL( dynamicRevisionLoaded( Tomahawk::DynamicPlaylistRevision) ), this, SLOT(onRevisionLoaded( Tomahawk::DynamicPlaylistRevision) ) );
         disconnect( m_playlist->generator().data(), SIGNAL( error( QString, QString ) ), this, SLOT( generatorError( QString, QString ) ) );
         disconnect( m_playlist.data(), SIGNAL( deleted( Tomahawk::dynplaylist_ptr ) ), this, SLOT( onDeleted() ) );
+        disconnect( m_playlist.data(), SIGNAL( changed() ), this, SLOT( onChanged() ) );
     }
 
 
@@ -165,12 +166,14 @@ DynamicWidget::loadDynamicPlaylist( const Tomahawk::dynplaylist_ptr& playlist )
     connect( m_playlist.data(), SIGNAL( dynamicRevisionLoaded( Tomahawk::DynamicPlaylistRevision ) ), this, SLOT( onRevisionLoaded( Tomahawk::DynamicPlaylistRevision ) ) );
     connect( m_playlist->generator().data(), SIGNAL( error( QString, QString ) ), this, SLOT( generatorError( QString, QString ) ) );
     connect( m_playlist.data(), SIGNAL( deleted( Tomahawk::dynplaylist_ptr ) ), this, SLOT( onDeleted() ) );
+    connect( m_playlist.data(), SIGNAL( changed() ), this, SLOT( onChanged() ) );
 }
 
 
 void
 DynamicWidget::onRevisionLoaded( const Tomahawk::DynamicPlaylistRevision& rev )
 {
+    Q_UNUSED( rev );
     qDebug() << "DynamicWidget::onRevisionLoaded";
     loadDynamicPlaylist( m_playlist );
     if( m_resolveOnNextLoad || !m_playlist->author()->isLocal() )
@@ -354,6 +357,7 @@ DynamicWidget::controlsChanged()
 void
 DynamicWidget::controlChanged( const Tomahawk::dyncontrol_ptr& control )
 {
+    Q_UNUSED( control );
     if( !m_playlist->author()->isLocal() )
         return;
     m_playlist->createNewRevision();
@@ -415,4 +419,12 @@ DynamicWidget::onDeleted()
 {
     emit destroyed( widget() );
     deleteLater();
+}
+
+void
+DynamicWidget::onChanged()
+{
+    if( !m_playlist.isNull() &&
+        ViewManager::instance()->currentPage() == this )
+        emit nameChanged( m_playlist->title() );
 }

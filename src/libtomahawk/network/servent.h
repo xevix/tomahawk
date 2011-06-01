@@ -46,7 +46,7 @@
 class Connection;
 class Connector;
 class ControlConnection;
-class FileTransferConnection;
+class StreamConnection;
 class ProxyConnection;
 class RemoteCollectionConnection;
 class PortFwdThread;
@@ -104,7 +104,7 @@ public:
 
     void connectToPeer( const QString& ha, int port, const QString &key, const QString& name = "", const QString& id = "" );
     void connectToPeer( const QString& ha, int port, const QString &key, Connection* conn );
-    void reverseOfferRequest( ControlConnection* orig_conn, const QString& key, const QString& theirkey );
+    void reverseOfferRequest( ControlConnection* orig_conn, const QString &theirdbid, const QString& key, const QString& theirkey );
 
     bool visibleExternally() const { return !m_externalHostname.isNull() || (m_externalPort > 0 && !m_externalAddress.isNull()); }
     QString externalAddress() const { return !m_externalHostname.isNull() ? m_externalHostname : m_externalAddress.toString(); }
@@ -116,7 +116,7 @@ public:
     bool connectedToSession( const QString& session );
     unsigned int numConnectedPeers() const { return m_controlconnections.length(); }
 
-    QList< FileTransferConnection* > fileTransfers() const { return m_ftsessions; }
+    QList< StreamConnection* > streams() const { return m_scsessions; }
 
     QSharedPointer<QIODevice> getIODeviceForUrl( const Tomahawk::result_ptr& result );
     void registerIODeviceFactory( const QString &proto, boost::function<QSharedPointer<QIODevice>(Tomahawk::result_ptr)> fac );
@@ -124,8 +124,8 @@ public:
     QSharedPointer<QIODevice> httpIODeviceFactory( const Tomahawk::result_ptr& result );
 
 signals:
-    void fileTransferStarted( FileTransferConnection* );
-    void fileTransferFinished( FileTransferConnection* );
+    void streamStarted( StreamConnection* );
+    void streamFinished( StreamConnection* );
     void ready();
 
 protected:
@@ -137,8 +137,8 @@ public slots:
     void socketError( QAbstractSocket::SocketError );
     void createParallelConnection( Connection* orig_conn, Connection* new_conn, const QString& key );
 
-    void registerFileTransferConnection( FileTransferConnection* );
-    void onFileTransferFinished( FileTransferConnection* ftc );
+    void registerStreamConnection( StreamConnection* );
+    void onStreamFinished( StreamConnection* sc );
 
     void socketConnected();
     void triggerDBSync();
@@ -146,11 +146,11 @@ public slots:
 private slots:
     void readyRead();
 
-    Connection* claimOffer( ControlConnection* cc, const QString &key, const QHostAddress peer = QHostAddress::Any );
+    Connection* claimOffer( ControlConnection* cc, const QString &nodeid, const QString &key, const QHostAddress peer = QHostAddress::Any );
 
 private:
     void handoverSocket( Connection* conn, QTcpSocketExtra* sock );
-
+    bool checkACL( const Connection* conn, const QString &nodeid, bool showDialog ) const;
     void printCurrentTransfers();
 
     QJson::Parser parser;
@@ -161,7 +161,7 @@ private:
     QString m_externalHostname;
 
     // currently active file transfers:
-    QList< FileTransferConnection* > m_ftsessions;
+    QList< StreamConnection* > m_scsessions;
     QMutex m_ftsession_mut;
 
     QMap< QString,boost::function<QSharedPointer<QIODevice>(Tomahawk::result_ptr)> > m_iofactories;

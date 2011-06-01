@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -41,8 +41,11 @@ DatabaseCommand_Resolve::exec( DatabaseImpl* lib )
     {
         qDebug() << "Using result-hint to speed up resolving:" << m_query->resultHint();
 
-        Tomahawk::result_ptr result = lib->result( m_query->resultHint() );
-        if ( !result.isNull() && result->collection()->source()->isOnline() )
+        Tomahawk::result_ptr result = lib->resultFromHint( m_query );
+/*        qDebug() << "Result null:" << result.isNull();
+        qDebug() << "Collection null:" << result->collection().isNull();
+        qDebug() << "Source null:" << result->collection()->source().isNull();*/
+        if ( !result.isNull() && !result->collection().isNull() && result->collection()->source()->isOnline() )
         {
             res << result;
             emit results( m_query->id(), res );
@@ -119,7 +122,7 @@ DatabaseCommand_Resolve::exec( DatabaseImpl* lib )
             s = SourceList::instance()->get( files_query.value( 13 ).toUInt() );
             if( s.isNull() )
             {
-                Q_ASSERT( false );
+                qDebug() << "WTF: Could not find source" << files_query.value( 13 ).toUInt();
                 continue;
             }
 
@@ -140,6 +143,20 @@ DatabaseCommand_Resolve::exec( DatabaseImpl* lib )
         result->setRID( uuid() );
         result->setAlbumPos( files_query.value( 14 ).toUInt() );
         result->setId( files_query.value( 9 ).toUInt() );
+        result->setYear( files_query.value( 17 ).toUInt() );
+
+        TomahawkSqlQuery attrQuery = lib->newquery();
+        QVariantMap attr;
+
+        attrQuery.prepare( "SELECT k, v FROM track_attributes WHERE id = ?" );
+        attrQuery.bindValue( 0, result->dbid() );
+        attrQuery.exec();
+        while ( attrQuery.next() )
+        {
+            attr[ attrQuery.value( 0 ).toString() ] = attrQuery.value( 1 ).toString();
+        }
+
+        result->setAttributes( attr );
 
         float score = how_similar( m_query, result );
         result->setScore( score );

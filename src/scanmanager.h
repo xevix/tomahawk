@@ -19,12 +19,18 @@
 #ifndef SCANMANAGER_H
 #define SCANMANAGER_H
 
+#include <QHash>
+#include <QMap>
 #include <QObject>
+#include <QStringList>
+#include <QWeakPointer>
 
 #include "dllmacro.h"
 
 class MusicScanner;
 class QThread;
+class QFileSystemWatcher;
+class QTimer;
 
 class ScanManager : public QObject
 {
@@ -35,25 +41,37 @@ public:
 
     explicit ScanManager( QObject* parent = 0 );
     virtual ~ScanManager();
-    
-    void runManualScan( const QString& path );
 
 signals:
     void finished();
     
+public slots:
+    void runManualScan( const QStringList& paths, bool recursive = true );
+    void handleChangedDir( const QString& path );
+    void addWatchedDirs( const QStringList& paths );
+    void removeWatchedDir( const QString& path );
+
 private slots:
-    void scannerQuit();
     void scannerFinished();
-    void scannerDestroyed( QObject* scanner );
+    
+    void runStartupScan();
+    void queuedScanTimeout();
+    void deferredScanTimeout();
 
     void onSettingsChanged();
     
 private:
     static ScanManager* s_instance;
     
-    MusicScanner* m_scanner;
+    QWeakPointer< MusicScanner > m_scanner;
     QThread* m_musicScannerThreadController;
-    QString m_currScannerPath;
+    QStringList m_currScannerPaths;
+    QFileSystemWatcher* m_dirWatcher;
+    
+    QTimer* m_queuedScanTimer;
+    QTimer* m_deferredScanTimer;
+    QStringList m_queuedChangedDirs;
+    QHash< bool, QStringList > m_deferredDirs;
 };
 
 #endif

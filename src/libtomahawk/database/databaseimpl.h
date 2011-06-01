@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -64,7 +64,7 @@ public:
     QVariantMap album( int id );
     QVariantMap track( int id );
     Tomahawk::result_ptr file( int fid );
-    Tomahawk::result_ptr result( const QString& url );
+    Tomahawk::result_ptr resultFromHint( const Tomahawk::query_ptr& query );
 
     static bool scorepairSorter( const QPair<int,float>& left, const QPair<int,float>& right )
     {
@@ -84,7 +84,11 @@ signals:
 public slots:
 
 private:
-    bool updateSchema( int currentver );
+    QString cleanSql( const QString& sql );
+
+    bool m_ready;
+
+    bool updateSchema( int oldVersion );
 
     QSqlDatabase db;
 

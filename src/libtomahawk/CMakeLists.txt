@@ -4,6 +4,7 @@ SET( QT_USE_QTGUI TRUE )
 SET( QT_USE_QTSQL TRUE )
 SET( QT_USE_QTNETWORK TRUE )
 SET( QT_USE_QTXML TRUE )
+SET( QT_USE_QTUITOOLS TRUE )
 
 include( ${QT_USE_FILE} )
 
@@ -16,31 +17,38 @@ set( libSources
     sourcelist.cpp
     pipeline.cpp
 
+    aclsystem.cpp
     artist.cpp
     album.cpp
     collection.cpp
+    webcollection.cpp
     playlist.cpp
+    resolver.cpp
     query.cpp
     result.cpp
     source.cpp
     viewpage.cpp
+    viewmanager.cpp
+    globalactionmanager.cpp
 
     sip/SipPlugin.cpp
+    sip/SipHandler.cpp
+    sip/SipModel.cpp
+    sip/sipinfo.cpp
 
-    audio/madtranscode.cpp
-    audio/vorbistranscode.cpp
-    audio/flactranscode.cpp
     audio/audioengine.cpp
 
     database/database.cpp
     database/fuzzyindex.cpp
     database/databasecollection.cpp
+    database/localcollection.cpp
     database/databaseworker.cpp
     database/databaseimpl.cpp
     database/databaseresolver.cpp
     database/databasecommand.cpp
     database/databasecommandloggable.cpp
     database/databasecommand_resolve.cpp
+    database/databasecommand_allartists.cpp
     database/databasecommand_allalbums.cpp
     database/databasecommand_alltracks.cpp
     database/databasecommand_addfiles.cpp
@@ -62,22 +70,30 @@ set( libSources
     database/databasecommand_renameplaylist.cpp
     database/databasecommand_loadops.cpp
     database/databasecommand_updatesearchindex.cpp
-    database/databasecollection.cpp
     database/databasecommand_setdynamicplaylistrevision.cpp
     database/databasecommand_createdynamicplaylist.cpp
     database/databasecommand_loaddynamicplaylist.cpp
-    database/databasecommand_loadalldynamicplaylists.cpp
+    database/databasecommand_loadallautoplaylists.cpp
+    database/databasecommand_loadallstations.cpp
     database/databasecommand_deletedynamicplaylist.cpp
     database/databasecommand_addclientauth.cpp
     database/databasecommand_clientauthvalid.cpp
     database/database.cpp
 
-    playlist/collectionmodel.cpp
+    infosystem/infosystemcache.cpp
+    infosystem/infosystem.cpp
+    infosystem/infosystemworker.cpp
+    infosystem/infoplugins/echonestplugin.cpp
+    infosystem/infoplugins/lastfmplugin.cpp
+    infosystem/infoplugins/musixmatchplugin.cpp
+
+    playlist/treemodel.cpp
+    playlist/treeproxymodel.cpp
+    playlist/treeheader.cpp
+    playlist/treeitemdelegate.cpp
     playlist/collectionproxymodel.cpp
     playlist/collectionflatmodel.cpp
     playlist/collectionview.cpp
-    playlist/playlistmanager.cpp
-    playlist/plitem.cpp
     playlist/playlistmodel.cpp
     playlist/playlistproxymodel.cpp
     playlist/playlistview.cpp
@@ -85,18 +101,21 @@ set( libSources
     playlist/queueproxymodel.cpp
     playlist/queueview.cpp
     playlist/trackmodel.cpp
+    playlist/trackmodelitem.cpp
     playlist/trackproxymodel.cpp
     playlist/trackview.cpp
     playlist/trackheader.cpp
+    playlist/treemodelitem.cpp
     playlist/albumitem.cpp
     playlist/albummodel.cpp
     playlist/albumproxymodel.cpp
     playlist/albumitemdelegate.cpp
     playlist/albumview.cpp
+    playlist/artistview.cpp
 
     playlist/topbar/topbar.cpp
-    playlist/topbar/clearbutton.cpp  
-    playlist/topbar/searchlineedit.cpp  
+    playlist/topbar/clearbutton.cpp
+    playlist/topbar/searchlineedit.cpp
     playlist/topbar/lineedit.cpp
     playlist/topbar/searchbutton.cpp
 
@@ -122,7 +141,7 @@ set( libSources
 
     network/bufferiodevice.cpp
     network/msgprocessor.cpp
-    network/filetransferconnection.cpp
+    network/streamconnection.cpp
     network/dbsyncconnection.cpp
     network/remotecollection.cpp
     network/portfwdthread.cpp
@@ -139,9 +158,12 @@ set( libSources
     utils/widgetdragfilter.cpp
     utils/animatedsplitter.cpp
     utils/xspfloader.cpp
+    utils/xspfgenerator.cpp
 
     widgets/newplaylistwidget.cpp
+    widgets/playlisttypeselectordlg.cpp
     widgets/welcomewidget.cpp
+    widgets/welcomeplaylistmodel.cpp
     widgets/overlaywidget.cpp
     widgets/infowidgets/sourceinfowidget.cpp
 
@@ -157,12 +179,16 @@ set( libHeaders
     pipeline.h
     functimeout.h
 
+    aclsystem.h
     collection.h
+    webcollection.h
     query.h
     resolver.h
     result.h
     source.h
     viewpage.h
+    viewmanager.h
+    globalactionmanager.h
 
     artist.h
     album.h
@@ -170,11 +196,10 @@ set( libHeaders
     playlist.h
 
     sip/SipPlugin.h
+    sip/SipHandler.h
+    sip/SipModel.h
+    sip/sipinfo.h
 
-    audio/transcodeinterface.h
-    audio/madtranscode.h
-    audio/vorbistranscode.h
-    audio/flactranscode.h
     audio/audioengine.h
 
     database/database.h
@@ -185,6 +210,7 @@ set( libHeaders
     database/databasecommand.h
     database/databasecommandloggable.h
     database/databasecommand_resolve.h
+    database/databasecommand_allartists.h
     database/databasecommand_allalbums.h
     database/databasecommand_alltracks.h
     database/databasecommand_addfiles.h
@@ -207,30 +233,40 @@ set( libHeaders
     database/databasecommand_loadops.h
     database/databasecommand_updatesearchindex.h
     database/databasecollection.h
+    database/localcollection.h
     database/databasecommand_setdynamicplaylistrevision.h
     database/databasecommand_createdynamicplaylist.h
     database/databasecommand_loaddynamicplaylist.h
     database/databasecommand_deletedynamicplaylist.h
-    database/databasecommand_loadalldynamicplaylists.h
+    database/databasecommand_loadallautoplaylists.h
+    database/databasecommand_loadallstations.h
     database/databasecommand_addclientauth.h
     database/databasecommand_clientauthvalid.h
+
+    infosystem/infosystem.h
+    infosystem/infosystemworker.h
+    infosystem/infosystemcache.h
+    infosystem/infoplugins/echonestplugin.h
+    infosystem/infoplugins/lastfmplugin.h
+    infosystem/infoplugins/musixmatchplugin.h
 
     network/bufferiodevice.h
     network/msgprocessor.h
     network/remotecollection.h
-    network/filetransferconnection.h
+    network/streamconnection.h
     network/dbsyncconnection.h
     network/servent.h
     network/connection.h
     network/controlconnection.h
     network/portfwdthread.h
 
-    playlist/collectionmodel.h
+    playlist/treemodel.h
+    playlist/treeproxymodel.h
+    playlist/treeheader.h
+    playlist/treeitemdelegate.h
     playlist/collectionproxymodel.h
     playlist/collectionflatmodel.h
     playlist/collectionview.h
-    playlist/playlistmanager.h
-    playlist/plitem.h
     playlist/playlistmodel.h
     playlist/playlistproxymodel.h
     playlist/playlistview.h
@@ -238,18 +274,21 @@ set( libHeaders
     playlist/queueproxymodel.h
     playlist/queueview.h
     playlist/trackmodel.h
+    playlist/trackmodelitem.h
     playlist/trackproxymodel.h
     playlist/trackview.h
     playlist/trackheader.h
+    playlist/treemodelitem.h
     playlist/albumitem.h
     playlist/albummodel.h
     playlist/albumproxymodel.h
     playlist/albumitemdelegate.h
     playlist/albumview.h
+    playlist/artistview.h
 
     playlist/topbar/topbar.h
     playlist/topbar/clearbutton.h
-    playlist/topbar/searchlineedit.h  
+    playlist/topbar/searchlineedit.h
     playlist/topbar/lineedit.h
     playlist/topbar/lineedit_p.h
     playlist/topbar/searchbutton.h
@@ -283,9 +322,12 @@ set( libHeaders
     utils/widgetdragfilter.h
     utils/animatedsplitter.h
     utils/xspfloader.h
+    utils/xspfgenerator.h
 
     widgets/newplaylistwidget.h
+    widgets/playlisttypeselectordlg.h
     widgets/welcomewidget.h
+    widgets/welcomeplaylistmodel.h
     widgets/overlaywidget.h
     widgets/infowidgets/sourceinfowidget.h
 
@@ -295,10 +337,11 @@ set( libHeaders
     kdsingleapplicationguard/kdlockedsharedmemorypointer.h
 )
 
-set( libHeaders_NoMOC 
-		playlist/dynamic/GeneratorInterface.h 
+set( libHeaders_NoMOC
+		playlist/dynamic/GeneratorInterface.h
 )
 set( libUI ${libUI}
+    widgets/playlisttypeselectordlg.ui
     widgets/newplaylistwidget.ui
     widgets/welcomewidget.ui
     widgets/infowidgets/sourceinfowidget.ui
@@ -314,31 +357,20 @@ include_directories( . ${CMAKE_CURRENT_BINARY_DIR} ${CMAKE_CURRENT_BINARY_DIR}/.
     ${LIBECHONEST_INCLUDE_DIR}/..
     ${CLUCENE_INCLUDE_DIR}
     ${CLUCENE_LIBRARY_DIR}
+    ${PHONON_INCLUDES}
+    ${CMAKE_BINARY_DIR}/thirdparty/liblastfm2/src
 
-    ../../include
-    ../network
     playlist
 
-    ${THIRDPARTY_DIR}/libportfwd/include
+    ${LIBPORTFWD_INCLUDE_DIR}
     ${THIRDPARTY_DIR}/qxt/qxtweb-standalone/qxtweb
-    ${THIRDPARTY_DIR}/rtaudio
-    ${THIRDPARTY_DIR}/alsa-playback
-    ${THIRDPARTY_DIR}/jdns
-    ${THIRDPARTY_DIR}/jdns/jdns
-    ${THIRDPARTY_DIR}/jdns/jdnsshared
-    ${THIRDPARTY_DIR}/qtweetlib/qtweetlib/src
+    ${CMAKE_BINARY_DIR}/thirdparty/liblastfm2/src
 )
 
 
 IF( WIN32 )
-    SET( libSources ${libSources} audio/rtaudiooutput.cpp )
-    SET( libHeaders ${libHeaders} audio/rtaudiooutput.h )
-
     SET( OS_SPECIFIC_LINK_LIBRARIES
         ${OS_SPECIFIC_LINK_LIBRARIES}
-    # Thirdparty
-        ${CMAKE_BINARY_DIR}/thirdparty/rtaudio/librtaudio.dll
-	${QJSON_LDFLAGS}
     # System
         "iphlpapi.a"
         "ws2_32.dll"
@@ -354,28 +386,17 @@ IF( APPLE )
     FIND_LIBRARY( COREFOUNDATION_LIBRARY CoreFoundation )
     MARK_AS_ADVANCED( COREAUDIO_LIBRARY COREFOUNDATION_LIBRARY )
 
-    SET( libSources ${libSources} audio/rtaudiooutput.cpp )
-    SET( libHeaders ${libHeaders} audio/rtaudiooutput.h )
-
     SET( OS_SPECIFIC_LINK_LIBRARIES
         ${OS_SPECIFIC_LINK_LIBRARIES}
-        # Thirdparty
-	${QJSON_LIBRARIES}
-        rtaudio
         # System
         ${COREAUDIO_LIBRARY}
         ${COREFOUNDATION_LIBRARY}
     )
 ENDIF( APPLE )
 
-IF( UNIX AND NOT APPLE )
-    SET( OS_SPECIFIC_LINK_LIBRARIES
-        ${OS_SPECIFIC_LINK_LIBRARIES}
-        # Thirdparty
-        alsaplayback
-	${QJSON_LDFLAGS}
-    )
-ENDIF( UNIX AND NOT APPLE )
+IF(LIBLASTFM_FOUND)
+    SET(LINK_LIBRARIES ${LINK_LIBRARIES} tomahawk_lastfm2 )
+ENDIF(LIBLASTFM_FOUND)
 
 qt4_wrap_ui( libUI_H ${libUI} )
 qt4_wrap_cpp( libMoc ${libHeaders} )
@@ -385,26 +406,23 @@ SET( libSources ${libSources} ${libUI_H} ${libHeaders_NoMOC} )
 add_library( tomahawklib SHARED ${libSources} ${libMoc} )
 
 target_link_libraries( tomahawklib
-    # Internal
-    tomahawk_jdns
-    tomahawk_qtweetlib
-
     # Thirdparty shipped with tomahawk
-    portfwd
-
-    # soon to be removed by phonon-dependency
-    FLAC++
-    ogg
-    vorbisfile
-    mad
+    ${LIBPORTFWD_LIBRARIES}
 
     # External deps
+    ${QJSON_LIBRARIES}
+    ${PHONON_LIBS}
     ${TAGLIB_LIBRARIES}
     ${CLUCENE_LIBRARIES}
     ${LIBECHONEST_LIBRARY}
     ${QT_LIBRARIES}
     ${OS_SPECIFIC_LINK_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
+    ${LINK_LIBRARIES}
 )
 
-INSTALL( TARGETS tomahawklib DESTINATION lib${LIB_SUFFIX} )
+INSTALL( TARGETS tomahawklib
+    RUNTIME DESTINATION bin
+    LIBRARY DESTINATION lib${LIB_SUFFIX}
+    ARCHIVE DESTINATION lib${LIB_SUFFIX}
+)

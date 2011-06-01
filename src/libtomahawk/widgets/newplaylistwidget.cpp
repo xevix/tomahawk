@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -24,7 +24,7 @@
 
 #include "utils/tomahawkutils.h"
 
-#include "playlist/playlistmanager.h"
+#include "viewmanager.h"
 #include "playlist/playlistmodel.h"
 
 #include "widgets/overlaywidget.h"
@@ -54,7 +54,7 @@ NewPlaylistWidget::NewPlaylistWidget( QWidget* parent )
     connect( ui->buttonBox, SIGNAL( rejected() ), SLOT( cancel() ) );
 
     m_suggestionsModel = new PlaylistModel( ui->suggestionsView );
-    ui->suggestionsView->setModel( m_suggestionsModel );
+    ui->suggestionsView->setPlaylistModel( m_suggestionsModel );
     ui->suggestionsView->overlay()->setEnabled( false );
 
     connect( &m_filterTimer, SIGNAL( timeout() ), SLOT( updateSuggestions() ) );
@@ -119,17 +119,17 @@ NewPlaylistWidget::suggestionsFound()
 {
     XSPFLoader* loader = qobject_cast<XSPFLoader*>( sender() );
 
-    m_entries = loader->entries();
+    m_queries = loader->entries();
 
     delete m_suggestionsModel;
     m_suggestionsModel = new PlaylistModel( ui->suggestionsView );
-    ui->suggestionsView->setModel( m_suggestionsModel );
+    ui->suggestionsView->setPlaylistModel( m_suggestionsModel );
 
     QList<Tomahawk::query_ptr> ql;
-    foreach( const Tomahawk::plentry_ptr& entry, m_entries )
+    foreach( const Tomahawk::query_ptr& query, m_queries )
     {
-        m_suggestionsModel->append( entry->query() );
-        ql.append( entry->query() );
+        m_suggestionsModel->append( query );
+        ql.append( query );
     }
 
     loader->deleteLater();
@@ -141,10 +141,9 @@ NewPlaylistWidget::savePlaylist()
 {
     Tomahawk::playlist_ptr playlist;
 
-    playlist = Tomahawk::Playlist::create( SourceList::instance()->getLocal(), uuid(), ui->titleEdit->text(), "", "", false );
-    playlist->createNewRevision( uuid(), playlist->currentrevision(), m_entries );
+    playlist = Tomahawk::Playlist::create( SourceList::instance()->getLocal(), uuid(), ui->titleEdit->text(), "", "", false, m_queries );
 
-    PlaylistManager::instance()->show( playlist );
+    ViewManager::instance()->show( playlist );
     cancel();
 }
 

@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -18,11 +18,12 @@
 
 #include "controlconnection.h"
 
-#include "filetransferconnection.h"
+#include "streamconnection.h"
 #include "database/database.h"
 #include "database/databasecommand_collectionstats.h"
 #include "dbsyncconnection.h"
 #include "sourcelist.h"
+#include <sip/SipHandler.h>
 
 #define TCP_TIMEOUT 600
 
@@ -52,10 +53,10 @@ ControlConnection::~ControlConnection()
 
     if ( !m_source.isNull() )
         m_source->setOffline();
-    
+
     delete m_pingtimer;
-    m_servent->unregisterControlConnection(this);
-    if( m_dbsyncconn )
+    m_servent->unregisterControlConnection( this );
+    if ( m_dbsyncconn )
         m_dbsyncconn->deleteLater();
 }
 
@@ -118,8 +119,11 @@ ControlConnection::registerSource()
 {
     qDebug() << Q_FUNC_INFO << m_source->id();
     Source* source = (Source*) sender();
+    Q_UNUSED( source )
     Q_ASSERT( source == m_source.data() );
-    // .. but we'll use the shared pointer we've already made:
+
+//    qDebug() << Q_FUNC_INFO << "Setting avatar ... " << name() << !SipHandler::instance()->avatar( name() ).isNull();
+    source->setAvatar( SipHandler::instance()->avatar( name() ) );
 
     m_registered = true;
     m_servent->registerControlConnection( this );
@@ -228,7 +232,8 @@ ControlConnection::handleMsg( msg_ptr msg )
         {
             QString theirkey = m["key"].toString();
             QString ourkey   = m["offer"].toString();
-            servent()->reverseOfferRequest( this, ourkey, theirkey );
+            QString theirdbid = m["controlid"].toString();
+            servent()->reverseOfferRequest( this, theirdbid, ourkey, theirkey );
         }
         else if( m.value( "method" ).toString() == "dbsync-offer" )
         {

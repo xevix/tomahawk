@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -29,10 +29,12 @@
 #include "dynamic/widgets/LoadingSpinner.h"
 
 #include "trackheader.h"
-#include "playlistmanager.h"
+#include "viewmanager.h"
 #include "queueview.h"
 #include "trackmodel.h"
 #include "trackproxymodel.h"
+#include "track.h"
+#include "globalactionmanager.h"
 
 using namespace Tomahawk;
 
@@ -46,6 +48,7 @@ TrackView::TrackView( QWidget* parent )
     , m_overlay( new OverlayWidget( this ) )
     , m_loadingSpinner( new LoadingSpinner( this ) )
     , m_resizing( false )
+    , m_dragging( false )
 {
     setSortingEnabled( false );
     setAlternatingRowColors( true );
@@ -69,12 +72,16 @@ TrackView::TrackView( QWidget* parent )
     f.setPointSize( f.pointSize() - 1 );
     setFont( f );
 #endif
-    
+
 #ifdef Q_WS_MAC
     f.setPointSize( f.pointSize() - 2 );
     setFont( f );
 #endif
-    
+
+    QAction* createLinkAction = new QAction( tr( "Copy track link" ), this );
+    connect( createLinkAction, SIGNAL( triggered( bool ) ), this, SLOT( copyLink() ) );
+    addAction( createLinkAction );
+
     connect( this, SIGNAL( doubleClicked( QModelIndex ) ), SLOT( onItemActivated( QModelIndex ) ) );
 }
 
@@ -107,19 +114,28 @@ TrackView::setProxyModel( TrackProxyModel* model )
 
 
 void
-TrackView::setModel( TrackModel* model )
+TrackView::setModel( QAbstractItemModel* model )
+{
+    Q_UNUSED( model );
+    qDebug() << "Explicitly use setTrackModel instead";
+    Q_ASSERT( false );
+}
+
+
+void
+TrackView::setTrackModel( TrackModel* model )
 {
     m_model = model;
 
     if ( m_proxyModel )
     {
-        m_proxyModel->setSourceModel( model );
+        m_proxyModel->setSourceTrackModel( m_model );
     }
 
     connect( m_model, SIGNAL( itemSizeChanged( QModelIndex ) ), SLOT( onItemResized( QModelIndex ) ) );
     connect( m_model, SIGNAL( loadingStarted() ), m_loadingSpinner, SLOT( fadeIn() ) );
     connect( m_model, SIGNAL( loadingFinished() ), m_loadingSpinner, SLOT( fadeOut() ) );
-    
+
     connect( m_proxyModel, SIGNAL( filterChanged( QString ) ), SLOT( onFilterChanged( QString ) ) );
 
     setAcceptDrops( true );
@@ -129,7 +145,7 @@ TrackView::setModel( TrackModel* model )
 void
 TrackView::onItemActivated( const QModelIndex& index )
 {
-    PlItem* item = m_model->itemFromIndex( m_proxyModel->mapToSource( index ) );
+    TrackModelItem* item = m_model->itemFromIndex( m_proxyModel->mapToSource( index ) );
     if ( item && item->query()->numResults() )
     {
         qDebug() << "Result activated:" << item->query()->toString() << item->query()->results().first()->url();
@@ -162,7 +178,6 @@ TrackView::onItemResized( const QModelIndex& index )
     m_delegate->updateRowSize( index );
 }
 
-
 void
 TrackView::playItem()
 {
@@ -178,11 +193,11 @@ TrackView::addItemsToQueue()
         if ( idx.column() )
             continue;
 
-        PlItem* item = model()->itemFromIndex( proxyModel()->mapToSource( idx ) );
+        TrackModelItem* item = model()->itemFromIndex( proxyModel()->mapToSource( idx ) );
         if ( item && item->query()->numResults() )
         {
-            PlaylistManager::instance()->queue()->model()->append( item->query() );
-            PlaylistManager::instance()->showQueue();
+            ViewManager::instance()->queue()->model()->append( item->query() );
+            ViewManager::instance()->showQueue();
         }
     }
 }
@@ -275,6 +290,19 @@ TrackView::dropEvent( QDropEvent* event )
                 model()->dropMimeData( event->mimeData(), event->proposedAction(), index.row(), 0, index.parent() );
             }
         }
+        else if ( event->mimeData()->hasFormat( "application/tomahawk.result.list" ) )
+        {
+            const QPoint pos = event->pos();
+            const QModelIndex index = indexAt( pos );
+
+            qDebug() << "Drop Event accepted at row:" << index.row();
+            event->acceptProposedAction();
+
+            if ( !model()->isReadOnly() )
+            {
+                model()->dropMimeData( event->mimeData(), event->proposedAction(), index.row(), 0, index.parent() );
+            }
+        }
     }
 
     m_dragging = false;
@@ -328,6 +356,17 @@ TrackView::onFilterChanged( const QString& )
     else
         if ( model()->trackCount() )
             m_overlay->hide();
+}
+
+
+void
+TrackView::copyLink()
+{
+    TrackModelItem* item = model()->itemFromIndex( proxyModel()->mapToSource( contextMenuIndex() ) );
+    if ( item && !item->query().isNull() )
+    {
+        GlobalActionManager::instance()->copyToClipboard( item->query() );
+    }
 }
 
 

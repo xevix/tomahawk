@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -55,6 +55,8 @@ public:
 
     float score() const;
     RID id() const;
+    bool isOnline() const;
+
     collection_ptr collection() const;
     Tomahawk::artist_ptr artist() const;
     Tomahawk::album_ptr album() const;
@@ -85,6 +87,7 @@ public:
     void setSize( unsigned int size ) { m_size = size; }
     void setAlbumPos( unsigned int albumpos ) { m_albumpos = albumpos; }
     void setModificationTime( unsigned int modtime ) { m_modtime = modtime; }
+    void setYear( unsigned int year ) { m_year = year; }
 
     QVariantMap attributes() const { return m_attributes; }
     void setAttributes( const QVariantMap& map ) { m_attributes = map; updateAttributes(); }

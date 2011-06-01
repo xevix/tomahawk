@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -36,30 +36,37 @@ DatabaseCommand_DirMtimes::exec( DatabaseImpl* dbi )
 void
 DatabaseCommand_DirMtimes::execSelect( DatabaseImpl* dbi )
 {
-    QDir dir( m_prefix );
-    qDebug() << Q_FUNC_INFO << dir.absolutePath() << m_update;
     QMap<QString,unsigned int> mtimes;
     TomahawkSqlQuery query = dbi->newquery();
-
-    if ( m_prefix.isEmpty() )
-    {
+    if( m_prefix.isEmpty() && m_prefixes.isEmpty() )
         query.exec( "SELECT name, mtime FROM dirs_scanned" );
-    }
+    else if( m_prefixes.isEmpty() )
+        execSelectPath( dbi, m_prefix, mtimes );
     else
     {
-        query.prepare( QString( "SELECT name, mtime "
-                                "FROM dirs_scanned "
-                                "WHERE name LIKE :prefix" ) );
-
-        query.bindValue( ":prefix", dir.absolutePath() + "%" );
-        query.exec();
+        if( !m_prefix.isEmpty() )
+            execSelectPath( dbi, m_prefix, mtimes );
+        foreach( QString path, m_prefixes )
+            execSelectPath( dbi, path, mtimes );
     }
+    emit done( mtimes );
+}
+
+void
+DatabaseCommand_DirMtimes::execSelectPath( DatabaseImpl *dbi, const QDir& path, QMap<QString, unsigned int> &mtimes )
+{
+    TomahawkSqlQuery query = dbi->newquery();
+    query.prepare( QString( "SELECT name, mtime "
+                            "FROM dirs_scanned "
+                            "WHERE name LIKE :prefix" ) );
+
+    query.bindValue( ":prefix", path.canonicalPath() + "%" );
+    query.exec();
+
     while( query.next() )
     {
         mtimes.insert( query.value( 0 ).toString(), query.value( 1 ).toUInt() );
     }
-
-    emit done( mtimes );
 }
 
 

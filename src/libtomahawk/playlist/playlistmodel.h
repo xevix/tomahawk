@@ -22,7 +22,7 @@
 #include <QList>
 #include <QHash>
 
-#include "plitem.h"
+#include "trackmodelitem.h"
 #include "trackmodel.h"
 #include "collection.h"
 #include "query.h"
@@ -32,6 +32,7 @@
 
 #include "dllmacro.h"
 
+class QMimeData;
 class QMetaData;
 
 class DLLEXPORT PlaylistModel : public TrackModel
@@ -47,6 +48,7 @@ public:
     QVariant data( const QModelIndex& index, int role ) const;
     QVariant headerData( int section, Qt::Orientation orientation, int role ) const;
 
+    virtual QMimeData* mimeData ( const QModelIndexList& indexes ) const;
     virtual bool dropMimeData( const QMimeData* data, Qt::DropAction action, int row, int column, const QModelIndex& parent );
 
     Tomahawk::playlist_ptr playlist() const { return m_playlist; }
@@ -65,13 +67,14 @@ public:
     void remove( unsigned int row, bool moreToCome = false );
     virtual void removeIndex( const QModelIndex& index, bool moreToCome = false );
 
+    bool isTemporary() const;
 signals:
     void repeatModeChanged( PlaylistInterface::RepeatMode mode );
     void shuffleModeChanged( bool enabled );
 
     void itemSizeChanged( const QModelIndex& index );
-
     void playlistDeleted();
+    void playlistChanged();
 
 private slots:
     void onDataChanged();
@@ -88,7 +91,7 @@ private:
     QList<Tomahawk::plentry_ptr> playlistEntries() const;
 
     Tomahawk::playlist_ptr m_playlist;
-    bool m_waitForUpdate;
+    bool m_waitForUpdate, m_isTemporary;
     QList< Tomahawk::Query* > m_waitingForResolved;
 };
 

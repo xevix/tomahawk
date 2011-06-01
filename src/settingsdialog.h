@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -20,7 +20,14 @@
 #define SETTINGSDIALOG_H
 
 #include <QDialog>
+#include <QModelIndex>
 
+class QListWidgetItem;
+class Ui_StackedSettingsDialog;
+class SipPluginFactory;
+class SipPlugin;
+class SipModel;
+class ResolversModel;
 class QNetworkReply;
 
 namespace Ui
@@ -39,8 +46,13 @@ public:
 
     void saveSettings();
 
+private slots:
+    void proxyTypeChangedSlot( int index );
+    
 private:
     Ui::ProxyDialog* ui;
+    QHash<int,int> m_forwardMap;
+    QHash<int,int> m_backwardMap;
 };
 
 class SettingsDialog : public QDialog
@@ -53,7 +65,7 @@ public:
 
 signals:
     void settingsChanged();
-    
+
 protected:
     void changeEvent( QEvent* e );
 
@@ -71,13 +83,31 @@ private slots:
     void addScriptResolver();
     void scriptSelectionChanged();
     void removeScriptResolver();
-    
+    void openResolverConfig( const QString& );
+    void sipItemClicked ( const QModelIndex& );
+    void openSipConfig( SipPlugin* );
+    void factoryActionTriggered ( bool );
+    void sipFactoryClicked( SipPluginFactory* );
+    void sipContextMenuRequest( const QPoint& );
+    void sipPluginDeleted( bool );
+    void sipPluginRowDeleted( bool );
+
+    // dialog slots
+    void resolverConfigClosed( int value );
+    void sipConfigClosed( int value );
+
+    void changePage( QListWidgetItem*, QListWidgetItem* );
+
 private:
-    Ui::SettingsDialog* ui;
+    void createIcons();
+    void setupSipButtons();
+
+    Ui_StackedSettingsDialog* ui;
 
     ProxyDialog m_proxySettings;
     bool m_rejected;
-    QNetworkReply* m_testLastFmQuery;
+    SipModel* m_sipModel;
+    ResolversModel* m_resolversModel;
 };
 
 #endif // SETTINGSDIALOG_H

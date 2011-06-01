@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -23,6 +23,7 @@
 #include <QMenu>
 
 #include "source.h"
+#include "sourcetree/sourcesmodel.h"
 
 class CollectionModel;
 class PlaylistModel;
@@ -39,28 +40,22 @@ public:
 public slots:
     void showOfflineSources();
     void hideOfflineSources();
-    
+
+    void renamePlaylist();
 signals:
     void onOnline( const QModelIndex& index );
     void onOffline( const QModelIndex& index );
 
 private slots:
-    void onPlaylistActivated( const Tomahawk::playlist_ptr& playlist );
-    void onDynamicPlaylistActivated( const Tomahawk::dynplaylist_ptr& playlist );
-    void onCollectionActivated( const Tomahawk::collection_ptr& collection );
-    void onSuperCollectionActivated();
-    void onTempPageActivated();
-    
+    void onItemExpanded( const QModelIndex& idx );
     void onItemActivated( const QModelIndex& index );
-    void onSelectionChanged();
+    void selectRequest( const QModelIndex& idx );
 
     void loadPlaylist();
-    void deletePlaylist();
-    void renamePlaylist();
-    
-    void onCustomContextMenu( const QPoint& pos );
-    void onSourceOffline( Tomahawk::source_ptr );
+    void deletePlaylist( const QModelIndex& = QModelIndex() );
+    void copyPlaylistLink();
 
+    void onCustomContextMenu( const QPoint& pos );
 protected:
 //    void drawBranches( QPainter* painter, const QRect& rect, const QModelIndex& index ) const {}
     void drawRow( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const;
@@ -68,22 +63,27 @@ protected:
     virtual void paintEvent( QPaintEvent* event );
 
     virtual void dragEnterEvent( QDragEnterEvent* event );
-    virtual void dragLeaveEvent( QDragLeaveEvent* event ) { m_dragging = false; setDirtyRegion( m_dropRect ); }
+    virtual void dragLeaveEvent( QDragLeaveEvent* event ) { Q_UNUSED( event ); m_dragging = false; setDirtyRegion( m_dropRect ); }
     virtual void dragMoveEvent( QDragMoveEvent* event );
     virtual void dropEvent( QDropEvent* event );
+    virtual void keyPressEvent( QKeyEvent* event );
 
 private:
     void setupMenus();
 
-    CollectionModel* m_collectionModel;
+    template< typename T >
+    T* itemFromIndex( const QModelIndex& index ) const;
+
     SourcesModel* m_model;
     SourcesProxyModel* m_proxyModel;
     QModelIndex m_contextMenuIndex;
 
     QMenu m_playlistMenu;
+    QMenu m_roPlaylistMenu;
     QAction* m_loadPlaylistAction;
     QAction* m_renamePlaylistAction;
     QAction* m_deletePlaylistAction;
+    QAction* m_copyPlaylistAction;
 
     bool m_dragging;
     QRect m_dropRect;

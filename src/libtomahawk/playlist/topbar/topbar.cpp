@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -61,7 +61,7 @@ TopBar::TopBar( QWidget* parent )
         m_dudes.append( manlbl );
     }
 
-    QFile f( RESPATH "topbar-radiobuttons.css" );
+    QFile f( RESPATH "stylesheets/topbar-radiobuttons.css" );
     f.open( QFile::ReadOnly );
     QString css = QString::fromAscii( f.readAll() );
     f.close();
@@ -72,10 +72,10 @@ TopBar::TopBar( QWidget* parent )
     ui->radioDetailed->setFocusPolicy( Qt::NoFocus );
     ui->radioCloud->setFocusPolicy( Qt::NoFocus );
 
-    ui->radioDetailed->setEnabled( false );
+    ui->radioCloud->hide();
 
-    connect( ui->radioNormal, SIGNAL( clicked() ), SIGNAL( flatMode() ) );
-    connect( ui->radioDetailed, SIGNAL( clicked() ), SIGNAL( artistMode() ) );
+    connect( ui->radioNormal, SIGNAL( clicked() ), SIGNAL( artistMode() ) );
+    connect( ui->radioDetailed, SIGNAL( clicked() ), SIGNAL( flatMode() ) );
     connect( ui->radioCloud, SIGNAL( clicked() ), SIGNAL( albumMode() ) );
 
     setNumSources( 0 );
@@ -83,28 +83,31 @@ TopBar::TopBar( QWidget* parent )
     setNumArtists( 0 );
     setNumShown( 0 );
 
-    onFlatMode();
+    onArtistMode();
 
-    connect( PlaylistManager::instance(), SIGNAL( numSourcesChanged( unsigned int ) ),
-                                            SLOT( setNumSources( unsigned int ) ) );
-    
-    connect( PlaylistManager::instance(), SIGNAL( numTracksChanged( unsigned int ) ),
-                                            SLOT( setNumTracks( unsigned int ) ) );
-    
-    connect( PlaylistManager::instance(), SIGNAL( numArtistsChanged( unsigned int ) ),
-                                            SLOT( setNumArtists( unsigned int ) ) );
-    
-    connect( PlaylistManager::instance(), SIGNAL( numShownChanged( unsigned int ) ),
-                                            SLOT( setNumShown( unsigned int ) ) );
-    
-    connect( PlaylistManager::instance(), SIGNAL( statsAvailable( bool ) ),
-                                            SLOT( setStatsVisible( bool ) ) );
-    
-    connect( PlaylistManager::instance(), SIGNAL( modesAvailable( bool ) ),
-                                            SLOT( setModesVisible( bool ) ) );
+    connect( ViewManager::instance(), SIGNAL( numSourcesChanged( unsigned int ) ),
+                                        SLOT( setNumSources( unsigned int ) ) );
 
-    connect( PlaylistManager::instance(), SIGNAL( modeChanged( PlaylistInterface::ViewMode ) ),
-                                            SLOT( onModeChanged( PlaylistInterface::ViewMode ) ) );
+    connect( ViewManager::instance(), SIGNAL( numTracksChanged( unsigned int ) ),
+                                        SLOT( setNumTracks( unsigned int ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( numArtistsChanged( unsigned int ) ),
+                                        SLOT( setNumArtists( unsigned int ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( numShownChanged( unsigned int ) ),
+                                        SLOT( setNumShown( unsigned int ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( statsAvailable( bool ) ),
+                                        SLOT( setStatsVisible( bool ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( modesAvailable( bool ) ),
+                                        SLOT( setModesVisible( bool ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( filterAvailable( bool ) ),
+                                        SLOT( setFilterVisible( bool ) ) );
+
+    connect( ViewManager::instance(), SIGNAL( modeChanged( PlaylistInterface::ViewMode ) ),
+                                        SLOT( onModeChanged( PlaylistInterface::ViewMode ) ) );
 }
 
 
@@ -273,6 +276,13 @@ TopBar::setModesVisible( bool b )
 
 
 void
+TopBar::setFilterVisible( bool b )
+{
+    ui->filterEdit->setVisible( b );
+}
+
+
+void
 TopBar::setFilter( const QString& filter )
 {
     ui->filterEdit->setText( filter );
@@ -306,14 +316,14 @@ TopBar::onModeChanged( PlaylistInterface::ViewMode mode )
 void
 TopBar::onFlatMode()
 {
-    ui->radioNormal->setChecked( true );
+    ui->radioDetailed->setChecked( true );
 }
 
 
 void
 TopBar::onArtistMode()
 {
-    ui->radioDetailed->setChecked( true );
+    ui->radioNormal->setChecked( true );
 }
 
 

@@ -33,7 +33,7 @@ using namespace Tomahawk;
 
 TrackModel::TrackModel( QObject* parent )
     : QAbstractItemModel( parent )
-    , m_rootItem( new PlItem( 0, this ) )
+    , m_rootItem( new TrackModelItem( 0, this ) )
     , m_readOnly( true )
 {
     qDebug() << Q_FUNC_INFO;
@@ -55,8 +55,8 @@ TrackModel::index( int row, int column, const QModelIndex& parent ) const
     if ( !m_rootItem || row < 0 || column < 0 )
         return QModelIndex();
 
-    PlItem* parentItem = itemFromIndex( parent );
-    PlItem* childItem = parentItem->children.value( row );
+    TrackModelItem* parentItem = itemFromIndex( parent );
+    TrackModelItem* childItem = parentItem->children.value( row );
     if ( !childItem )
         return QModelIndex();
 
@@ -70,7 +70,7 @@ TrackModel::rowCount( const QModelIndex& parent ) const
     if ( parent.column() > 0 )
         return 0;
 
-    PlItem* parentItem = itemFromIndex( parent );
+    TrackModelItem* parentItem = itemFromIndex( parent );
     if ( !parentItem )
         return 0;
 
@@ -81,6 +81,7 @@ TrackModel::rowCount( const QModelIndex& parent ) const
 int
 TrackModel::columnCount( const QModelIndex& parent ) const
 {
+    Q_UNUSED( parent );
     return 9;
 }
 
@@ -88,15 +89,15 @@ TrackModel::columnCount( const QModelIndex& parent ) const
 QModelIndex
 TrackModel::parent( const QModelIndex& child ) const
 {
-    PlItem* entry = itemFromIndex( child );
+    TrackModelItem* entry = itemFromIndex( child );
     if ( !entry )
         return QModelIndex();
 
-    PlItem* parentEntry = entry->parent;
+    TrackModelItem* parentEntry = entry->parent;
     if ( !parentEntry )
         return QModelIndex();
 
-    PlItem* grandparentEntry = parentEntry->parent;
+    TrackModelItem* grandparentEntry = parentEntry->parent;
     if ( !grandparentEntry )
         return QModelIndex();
 
@@ -108,7 +109,7 @@ TrackModel::parent( const QModelIndex& child ) const
 QVariant
 TrackModel::data( const QModelIndex& index, int role ) const
 {
-    PlItem* entry = itemFromIndex( index );
+    TrackModelItem* entry = itemFromIndex( index );
     if ( !entry )
         return QVariant();
 
@@ -126,21 +127,6 @@ TrackModel::data( const QModelIndex& index, int role ) const
         return QVariant();
 
     const query_ptr& query = entry->query();
-    if ( query.isNull() )
-    {
-        if ( !index.column() )
-        {
-            return entry->caption.isEmpty() ? "Unknown" : entry->caption;
-        }
-
-        if ( index.column() == 1 )
-        {
-            return entry->childCount;
-        }
-
-        return QVariant( "" );
-    }
-
     if ( !query->numResults() )
     {
         switch( index.column() )
@@ -207,6 +193,7 @@ TrackModel::data( const QModelIndex& index, int role ) const
 QVariant
 TrackModel::headerData( int section, Qt::Orientation orientation, int role ) const
 {
+    Q_UNUSED( orientation );
     QStringList headers;
     headers << tr( "Artist" ) << tr( "Track" ) << tr( "Album" ) << tr( "Duration" ) << tr( "Bitrate" ) << tr( "Age" ) << tr( "Year" ) << tr( "Size" ) << tr( "Origin" );
     if ( role == Qt::DisplayRole && section >= 0 )
@@ -222,13 +209,13 @@ void
 TrackModel::setCurrentItem( const QModelIndex& index )
 {
     qDebug() << Q_FUNC_INFO;
-    PlItem* oldEntry = itemFromIndex( m_currentIndex );
+    TrackModelItem* oldEntry = itemFromIndex( m_currentIndex );
     if ( oldEntry )
     {
         oldEntry->setIsPlaying( false );
     }
 
-    PlItem* entry = itemFromIndex( index );
+    TrackModelItem* entry = itemFromIndex( index );
     if ( entry )
     {
         m_currentIndex = index;
@@ -283,7 +270,7 @@ TrackModel::mimeData( const QModelIndexList &indexes ) const
             continue;
 
         QModelIndex idx = index( i.row(), 0, i.parent() );
-        PlItem* item = itemFromIndex( idx );
+        TrackModelItem* item = itemFromIndex( idx );
         if ( item )
         {
             const query_ptr& query = item->query();
@@ -315,7 +302,7 @@ TrackModel::removeIndex( const QModelIndex& index, bool moreToCome )
     if ( index.column() > 0 )
         return;
 
-    PlItem* item = itemFromIndex( index );
+    TrackModelItem* item = itemFromIndex( index );
     if ( item )
     {
         emit beginRemoveRows( index.parent(), index.row(), index.row() );
@@ -337,11 +324,11 @@ TrackModel::removeIndexes( const QList<QModelIndex>& indexes )
 }
 
 
-PlItem*
+TrackModelItem*
 TrackModel::itemFromIndex( const QModelIndex& index ) const
 {
     if ( index.isValid() )
-        return static_cast<PlItem*>( index.internalPointer() );
+        return static_cast<TrackModelItem*>( index.internalPointer() );
     else
     {
         return m_rootItem;
@@ -352,7 +339,7 @@ TrackModel::itemFromIndex( const QModelIndex& index ) const
 void
 TrackModel::onPlaybackFinished( const Tomahawk::result_ptr& result )
 {
-    PlItem* oldEntry = itemFromIndex( m_currentIndex );
+    TrackModelItem* oldEntry = itemFromIndex( m_currentIndex );
     if ( oldEntry && !oldEntry->query().isNull() && oldEntry->query()->results().contains( result ) )
     {
         oldEntry->setIsPlaying( false );
@@ -363,7 +350,7 @@ TrackModel::onPlaybackFinished( const Tomahawk::result_ptr& result )
 void
 TrackModel::onPlaybackStopped()
 {
-    PlItem* oldEntry = itemFromIndex( m_currentIndex );
+    TrackModelItem* oldEntry = itemFromIndex( m_currentIndex );
     if ( oldEntry )
     {
         oldEntry->setIsPlaying( false );

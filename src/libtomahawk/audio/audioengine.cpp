@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -19,21 +19,12 @@
 #include "audioengine.h"
 
 #include <QUrl>
-#include <QMutexLocker>
 
 #include "playlistinterface.h"
 
 #include "database/database.h"
 #include "database/databasecommand_logplayback.h"
 #include "network/servent.h"
-
-#include "madtranscode.h"
-#ifndef NO_OGG
-#include "vorbistranscode.h"
-#endif
-#ifndef NO_FLAC
-#include "flactranscode.h"
-#endif
 
 AudioEngine* AudioEngine::s_instance = 0;
 
@@ -46,49 +37,48 @@ AudioEngine::instance()
 
 
 AudioEngine::AudioEngine()
-    : QThread()
+    : QObject()
+    , m_isPlayingHttp( false )
     , m_playlist( 0 )
     , m_currentTrackPlaylist( 0 )
     , m_queue( 0 )
     , m_timeElapsed( 0 )
-    , m_i( 0 )
+    , m_expectStop( false )
 {
     s_instance = this;
     qDebug() << "Init AudioEngine";
 
-    moveToThread( this );
     qRegisterMetaType< AudioErrorCode >("AudioErrorCode");
 
-#ifdef Q_WS_X11
-    m_audio = new AlsaPlayback();
-#else
-    m_audio = new RTAudioOutput();
-#endif
-    connect( m_audio, SIGNAL( timeElapsed( unsigned int ) ), SLOT( timerTriggered( unsigned int ) ), Qt::DirectConnection );
+    m_mediaObject = new Phonon::MediaObject( this );
+    m_audioOutput = new Phonon::AudioOutput( Phonon::MusicCategory, this );
+    Phonon::createPath( m_mediaObject, m_audioOutput );
 
-    start();
+    m_mediaObject->setTickInterval( 150 );
+    connect( m_mediaObject, SIGNAL( stateChanged( Phonon::State, Phonon::State ) ), SLOT( onStateChanged( Phonon::State, Phonon::State ) ) );
+    connect( m_mediaObject, SIGNAL( tick( qint64 ) ), SLOT( timerTriggered( qint64 ) ) );
 }
 
 
 AudioEngine::~AudioEngine()
 {
-    qDebug() << Q_FUNC_INFO << "waiting for event loop to finish...";
-    quit();
-    wait( 1000 );
+    qDebug() << Q_FUNC_INFO;
 
-    m_input.clear();
-    delete m_audio;
+    m_mediaObject->stop();
+//    stop();
+
+    delete m_audioOutput;
+    delete m_mediaObject;
 }
 
 
 void
 AudioEngine::playPause()
 {
-    if( m_audio->isPlaying() )
+    if ( isPlaying() )
         pause();
     else
         play();
-
 }
 
 
@@ -97,10 +87,9 @@ AudioEngine::play()
 {
     qDebug() << Q_FUNC_INFO;
 
-    if ( m_audio->isPaused() )
+    if ( isPaused() )
     {
-        QMutexLocker lock( &m_mutex );
-        m_audio->resume();
+        m_mediaObject->play();
         emit resumed();
     }
     else
@@ -112,9 +101,8 @@ void
 AudioEngine::pause()
 {
     qDebug() << Q_FUNC_INFO;
-    QMutexLocker lock( &m_mutex );
 
-    m_audio->pause();
+    m_mediaObject->pause();
     emit paused();
 }
 
@@ -123,18 +111,9 @@ void
 AudioEngine::stop()
 {
     qDebug() << Q_FUNC_INFO;
-    QMutexLocker lock( &m_mutex );
 
-    if ( !m_input.isNull() )
-    {
-        m_input->close();
-        m_input.clear();
-    }
-
-    if ( !m_transcode.isNull() )
-        m_transcode->clearBuffers();
-
-    m_audio->stopPlayback();
+    m_expectStop = true;
+    m_mediaObject->stop();
 
     setCurrentTrack( Tomahawk::result_ptr() );
     emit stopped();
@@ -145,7 +124,6 @@ void
 AudioEngine::previous()
 {
     qDebug() << Q_FUNC_INFO;
-    clearBuffers();
     loadPreviousTrack();
 }
 
@@ -154,7 +132,6 @@ void
 AudioEngine::next()
 {
     qDebug() << Q_FUNC_INFO;
-    clearBuffers();
     loadNextTrack();
 }
 
@@ -165,8 +142,7 @@ AudioEngine::setVolume( int percentage )
     //qDebug() << Q_FUNC_INFO;
 
     percentage = qBound( 0, percentage, 100 );
-
-    m_audio->setVolume( percentage );
+    m_audioOutput->setVolume( (qreal)percentage / 100.0 );
     emit volumeChanged( percentage );
 }
 
@@ -179,13 +155,9 @@ AudioEngine::mute()
 
 
 void
-AudioEngine::onTrackAboutToClose()
+AudioEngine::onTrackAboutToFinish()
 {
     qDebug() << Q_FUNC_INFO;
-    // the only way the iodev we are reading from closes itself, is if
-    // there was a failure, usually network went away.
-    // but we might as well play the remaining data we received
-    // stop();
 }
 
 
@@ -195,9 +167,7 @@ AudioEngine::loadTrack( const Tomahawk::result_ptr& result )
     qDebug() << Q_FUNC_INFO << thread() << result;
     bool err = false;
 
-    // in a separate scope due to the QMutexLocker!
     {
-        QMutexLocker lock( &m_mutex );
         QSharedPointer<QIODevice> io;
 
         if ( result.isNull() )
@@ -205,22 +175,17 @@ AudioEngine::loadTrack( const Tomahawk::result_ptr& result )
         else
         {
             setCurrentTrack( result );
-            io = Servent::instance()->getIODeviceForUrl( m_currentTrack );
-            if ( m_currentTrack->url().startsWith( "http://" ) )
-            {
-                m_readReady = false;
-                connect( io.data(), SIGNAL( downloadProgress( qint64, qint64 ) ), SLOT( onDownloadProgress( qint64, qint64 ) ) );
-            }
-            else
-                m_readReady = true;
 
-            if ( !io || io.isNull() )
+            if ( !isHttpResult( m_currentTrack->url() ) )
             {
-                qDebug() << "Error getting iodevice for item";
-                err = true;
+                io = Servent::instance()->getIODeviceForUrl( m_currentTrack );
+
+                if ( !io || io.isNull() )
+                {
+                    qDebug() << "Error getting iodevice for item";
+                    err = true;
+                }
             }
-            else
-                connect( io.data(), SIGNAL( aboutToClose() ), SLOT( onTrackAboutToClose() ), Qt::DirectConnection );
         }
 
         if ( !err )
@@ -228,50 +193,43 @@ AudioEngine::loadTrack( const Tomahawk::result_ptr& result )
             qDebug() << "Starting new song from url:" << m_currentTrack->url();
             emit loading( m_currentTrack );
 
-            if ( !m_input.isNull() )
+            if ( !m_input.isNull() || m_isPlayingHttp )
             {
-                m_input->close();
-                m_input.clear();
+                if ( !m_input.isNull() )
+                {
+                    m_input->close();
+                    m_input.clear();
+                }
+
+                m_expectStop = true;
             }
 
-            if ( m_lastTrack.isNull() || ( m_currentTrack->mimetype() != m_lastTrack->mimetype() ) )
+            if ( !isHttpResult( m_currentTrack->url() ) )
             {
-                if ( !m_transcode.isNull() )
+                m_mediaObject->setCurrentSource( io.data() );
+                m_mediaObject->currentSource().setAutoDelete( false );
+                m_isPlayingHttp = false;
+            }
+            else
+            {
+                QUrl furl = m_currentTrack->url();
+                if ( m_currentTrack->url().contains( "?" ) )
                 {
-                    m_transcode.clear();
+                    furl = QUrl( m_currentTrack->url().left( m_currentTrack->url().indexOf( '?' ) ) );
+                    furl.setEncodedQuery( QString( m_currentTrack->url().mid( m_currentTrack->url().indexOf( '?' ) + 1 ) ).toLocal8Bit() );
+                    qDebug() << Q_FUNC_INFO << furl;
                 }
-
-                if ( m_currentTrack->mimetype() == "audio/mpeg" )
-                {
-                    m_transcode = QSharedPointer<TranscodeInterface>(new MADTranscode());
-                }
-#ifndef NO_OGG
-                else if ( m_currentTrack->mimetype() == "application/ogg" )
-                {
-                    m_transcode = QSharedPointer<TranscodeInterface>(new VorbisTranscode());
-                }
-#endif
-#ifndef NO_FLAC
-                else if ( m_currentTrack->mimetype() == "audio/flac" )
-                {
-                    m_transcode = QSharedPointer<TranscodeInterface>(new FLACTranscode());
-                }
-#endif
-                else
-                    qDebug() << "Could NOT find suitable transcoder! Stopping audio.";
-
-                if ( !m_transcode.isNull() )
-                    connect( m_transcode.data(), SIGNAL( streamInitialized( long, int ) ), SLOT( setStreamData( long, int ) ), Qt::DirectConnection );
+                m_mediaObject->setCurrentSource( furl );
+                m_mediaObject->currentSource().setAutoDelete( true );
+                m_isPlayingHttp = true;
             }
 
-            if ( !m_transcode.isNull() )
-            {
-                m_transcode->clearBuffers();
-                m_input = io;
+            m_input = io;
+            m_mediaObject->play();
+            emit started( m_currentTrack );
 
-                if ( m_audio->isPaused() )
-                    m_audio->resume();
-            }
+            DatabaseCommand_LogPlayback* cmd = new DatabaseCommand_LogPlayback( m_currentTrack, DatabaseCommand_LogPlayback::Started );
+            Database::instance()->enqueue( QSharedPointer<DatabaseCommand>(cmd) );
         }
     }
 
@@ -281,16 +239,8 @@ AudioEngine::loadTrack( const Tomahawk::result_ptr& result )
         return false;
     }
 
-    // needs to be out of the mutexlocker scope
-    if ( m_transcode.isNull() )
-    {
-        stop();
-        emit error( AudioEngine::DecodeError );
-    }
-
-    return !m_transcode.isNull();
+    return true;
 }
-
 
 void
 AudioEngine::loadPreviousTrack()
@@ -340,8 +290,6 @@ AudioEngine::playItem( PlaylistInterface* playlist, const Tomahawk::result_ptr& 
 {
     qDebug() << Q_FUNC_INFO;
 
-    clearBuffers();
-
     setPlaylist( playlist );
     m_currentTrackPlaylist = playlist;
 
@@ -350,54 +298,47 @@ AudioEngine::playItem( PlaylistInterface* playlist, const Tomahawk::result_ptr& 
 
 
 void
-AudioEngine::setStreamData( long sampleRate, int channels )
+AudioEngine::onStateChanged( Phonon::State newState, Phonon::State oldState )
 {
-    qDebug() << Q_FUNC_INFO << sampleRate << channels << thread();
+    qDebug() << Q_FUNC_INFO << oldState << newState;
 
-    if ( sampleRate < 44100 )
-        sampleRate = 44100;
-
-    m_audio->initAudio( sampleRate, channels );
-    if ( m_audio->startPlayback() )
+    if ( newState == Phonon::ErrorState )
     {
-        emit started( m_currentTrack );
-
-        DatabaseCommand_LogPlayback* cmd = new DatabaseCommand_LogPlayback( m_currentTrack, DatabaseCommand_LogPlayback::Started );
-        Database::instance()->enqueue( QSharedPointer<DatabaseCommand>(cmd) );
-    }
-    else
-    {
-        qDebug() << "Can't open device for audio output!";
-        stop();
-        emit error( AudioEngine::AudioDeviceError );
+        qDebug() << "Phonon Error:" << m_mediaObject->errorString() << m_mediaObject->errorType();
     }
 
-    qDebug() << Q_FUNC_INFO << sampleRate << channels << "done";
+    if ( oldState == Phonon::PlayingState && newState == Phonon::StoppedState )
+    {
+        if ( !m_expectStop )
+        {
+            m_expectStop = false;
+            loadNextTrack();
+        }
+    }
+
+    m_expectStop = false;
 }
 
 
 void
-AudioEngine::timerTriggered( unsigned int seconds )
+AudioEngine::timerTriggered( qint64 time )
 {
-    m_timeElapsed = seconds;
-    emit timerSeconds( seconds );
-
-    if ( m_currentTrack->duration() == 0 )
+    if ( m_timeElapsed != time / 1000 )
     {
-        emit timerPercentage( 0 );
-    }
-    else
-    {
-        emit timerPercentage( (unsigned int)( seconds / m_currentTrack->duration() ) );
-    }
-}
+        m_timeElapsed = time / 1000;
+        emit timerSeconds( m_timeElapsed );
 
+        if ( m_currentTrack->duration() == 0 )
+        {
+            emit timerPercentage( 0 );
+        }
+        else
+        {
+            emit timerPercentage( ( (double)m_timeElapsed / (double)m_currentTrack->duration() ) * 100.0 );
+        }
+    }
 
-void
-AudioEngine::clearBuffers()
-{
-    QMutexLocker lock( &m_mutex );
-    m_audio->clearBuffers();
+    emit timerMilliSeconds( time );
 }
 
 
@@ -424,96 +365,8 @@ AudioEngine::setCurrentTrack( const Tomahawk::result_ptr& result )
     m_currentTrack = result;
 }
 
-
-void
-AudioEngine::onDownloadProgress( qint64 recv, qint64 total )
+bool
+AudioEngine::isHttpResult( const QString& url ) const
 {
-    if ( ( recv > 1024 * 32 ) || recv > total ) 
-        m_readReady = true;
-}
-
-
-void
-AudioEngine::run()
-{
-    QTimer::singleShot( 0, this, SLOT( engineLoop() ) );
-    exec();
-    qDebug() << "AudioEngine event loop stopped";
-}
-
-
-void
-AudioEngine::engineLoop()
-{
-    qDebug() << "AudioEngine thread:" << this->thread();
-    loop();
-}
-
-
-void
-AudioEngine::loop()
-{
-    m_i++;
-    //if( m_i % 500 == 0 ) qDebug() << Q_FUNC_INFO << thread();
-
-    {
-        QMutexLocker lock( &m_mutex );
-
-/*        if ( m_i % 200 == 0 )
-        {
-            if ( !m_input.isNull() )
-                qDebug() << "Outer audio loop" << m_input->bytesAvailable() << m_audio->needData();
-        }*/
-
-        if ( m_i % 10 == 0 && m_audio->isPlaying() )
-            m_audio->triggerTimers();
-
-        if( !m_transcode.isNull() &&
-            !m_input.isNull() &&
-            m_input->bytesAvailable() &&
-            m_audio->needData() &&
-            !m_audio->isPaused() )
-        {
-            //if ( m_i % 50 == 0 )
-            //    qDebug() << "Inner audio loop";
-
-            if ( m_transcode->needData() > 0 )
-            {
-                QByteArray encdata = m_input->read( m_transcode->preferredDataSize() );
-                m_transcode->processData( encdata, m_input->atEnd() );
-            }
-
-            if ( m_transcode->haveData() )
-            {
-                QByteArray rawdata = m_transcode->data();
-                m_audio->processData( rawdata );
-            }
-
-            QTimer::singleShot( 0, this, SLOT( loop() ) );
-            return;
-        }
-    }
-
-    unsigned int nextdelay = 50;
-    // are we cleanly at the end of a track, and ready for the next one?
-    if ( !m_input.isNull() &&
-          m_input->atEnd() &&
-          m_readReady && 
-         !m_input->bytesAvailable() &&
-         !m_audio->haveData() &&
-         !m_audio->isPaused() )
-    {
-        qDebug() << "Starting next track then";
-        loadNextTrack();
-        // will need data immediately:
-        nextdelay = 0;
-    }
-    else if ( !m_input.isNull() && !m_input->isOpen() )
-    {
-        qDebug() << "AudioEngine IODev closed. errorString:" << m_input->errorString();
-        loadNextTrack();
-        nextdelay = 0;
-    }
-
-    QTimer::singleShot( nextdelay, this, SLOT( loop() ) );
+    return url.startsWith( "http://" );
 }

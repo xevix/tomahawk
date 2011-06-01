@@ -19,21 +19,22 @@
 #include "sourcetreeview.h"
 
 #include "playlist.h"
-#include "playlist/collectionmodel.h"
-#include "playlist/playlistmanager.h"
-#include "sourcetreeitem.h"
-#include "sourcesmodel.h"
+#include "viewmanager.h"
 #include "sourcesproxymodel.h"
 #include "sourcelist.h"
-#include "tomahawk/tomahawkapp.h"
+#include "sourcetree/items/playlistitems.h"
+#include "sourcetree/items/collectionitem.h"
 
 #include <QAction>
+#include <QApplication>
 #include <QContextMenuEvent>
 #include <QDragEnterEvent>
 #include <QHeaderView>
 #include <QPainter>
 #include <QStyledItemDelegate>
 #include <QSize>
+#include <globalactionmanager.h>
+#include <QFileDialog>
 
 using namespace Tomahawk;
 
@@ -48,7 +49,7 @@ protected:
     virtual void paint( QPainter* painter, const QStyleOptionViewItem& option, const QModelIndex& index ) const;
     virtual void updateEditorGeometry( QWidget* editor, const QStyleOptionViewItem& option, const QModelIndex& index ) const
     {
-        if ( SourcesModel::indexType( index ) == SourcesModel::PlaylistSource || SourcesModel::indexType( index ) == SourcesModel::DynamicPlaylistSource )
+        if ( index.data( SourcesModel::SourceTreeItemTypeRole ).toInt() == SourcesModel::StaticPlaylist )
             editor->setGeometry( option.rect.adjusted( 20, 0, 0, 0 ) );
         else
             QStyledItemDelegate::updateEditorGeometry( editor, option, index );
@@ -61,7 +62,6 @@ private:
 
 SourceTreeView::SourceTreeView( QWidget* parent )
     : QTreeView( parent )
-    , m_collectionModel( new CollectionModel( this ) )
     , m_dragging( false )
 {
     setFrameShape( QFrame::NoFrame );
@@ -80,7 +80,12 @@ SourceTreeView::SourceTreeView( QWidget* parent )
     setAllColumnsShowFocus( true );
     setUniformRowHeights( false );
     setIndentation( 16 );
-    setAnimated( true );
+    setSortingEnabled( true );
+    sortByColumn( 0, Qt::AscendingOrder );
+
+    // TODO animation conflicts with the expanding-playlists-when-collection-is-null
+    // so investigate
+//     setAnimated( true );
 
     setItemDelegate( new SourceDelegate( this ) );
 
@@ -89,6 +94,8 @@ SourceTreeView::SourceTreeView( QWidget* parent )
 
     m_model = new SourcesModel( this );
     m_proxyModel = new SourcesProxyModel( m_model, this );
+    connect( m_proxyModel, SIGNAL( selectRequest( QModelIndex ) ), this, SLOT( selectRequest( QModelIndex ) ), Qt::QueuedConnection );
+
     setModel( m_proxyModel );
 
     header()->setStretchLastSection( false );
@@ -96,24 +103,17 @@ SourceTreeView::SourceTreeView( QWidget* parent )
 
     connect( m_model, SIGNAL( clicked( QModelIndex ) ), SIGNAL( clicked( QModelIndex ) ) );
     connect( this, SIGNAL( clicked( QModelIndex ) ), SLOT( onItemActivated( QModelIndex ) ) );
-
-    connect( selectionModel(), SIGNAL( selectionChanged( QItemSelection, QItemSelection ) ), SLOT( onSelectionChanged() ) );
-    connect( SourceList::instance(), SIGNAL( sourceRemoved( Tomahawk::source_ptr ) ), SLOT( onSourceOffline( Tomahawk::source_ptr ) ) );
-
-    m_model->appendItem( source_ptr() );
+    connect( this, SIGNAL( expanded( QModelIndex ) ), this, SLOT( onItemExpanded( QModelIndex ) ) );
+//     connect( selectionModel(), SIGNAL( selectionChanged( QItemSelection, QItemSelection ) ), SLOT( onSelectionChanged() ) );
 
     hideOfflineSources();
 
-    connect( PlaylistManager::instance(), SIGNAL( playlistActivated( Tomahawk::playlist_ptr ) ),
-                                            SLOT( onPlaylistActivated( Tomahawk::playlist_ptr ) ) );
-    connect( PlaylistManager::instance(), SIGNAL( dynamicPlaylistActivated( Tomahawk::dynplaylist_ptr ) ),
-                                            SLOT( onDynamicPlaylistActivated( Tomahawk::dynplaylist_ptr ) ) );
-    connect( PlaylistManager::instance(), SIGNAL( collectionActivated( Tomahawk::collection_ptr ) ),
-                                            SLOT( onCollectionActivated( Tomahawk::collection_ptr ) ) );
-    connect( PlaylistManager::instance(), SIGNAL( superCollectionActivated() ),
-                                            SLOT( onSuperCollectionActivated() ) );
-    connect( PlaylistManager::instance(), SIGNAL( tempPageActivated() ),
-                                            SLOT( onTempPageActivated() ) );
+    // Light-blue sourcetree on osx
+#ifdef Q_WS_MAC
+    setStyleSheet( "SourceTreeView:active { background: #DDE4EB; } "
+                   "SourceTreeView        { background: #EDEDED; } " );
+#endif
+
 }
 
 
@@ -121,33 +121,40 @@ void
 SourceTreeView::setupMenus()
 {
     m_playlistMenu.clear();
-
-    m_loadPlaylistAction = m_playlistMenu.addAction( tr( "&Load Playlist" ) );
-    m_renamePlaylistAction = m_playlistMenu.addAction( tr( "&Rename Playlist" ) );
-    m_playlistMenu.addSeparator();
-    m_deletePlaylistAction = m_playlistMenu.addAction( tr( "&Delete Playlist" ) );
+    m_roPlaylistMenu.clear();
 
     bool readonly = true;
-    SourcesModel::SourceType type = SourcesModel::indexType( m_contextMenuIndex );
-    if ( type == SourcesModel::PlaylistSource || type == SourcesModel::DynamicPlaylistSource )
+    SourcesModel::RowType type = ( SourcesModel::RowType )model()->data( m_contextMenuIndex, SourcesModel::SourceTreeItemTypeRole ).toInt();
+    if ( type == SourcesModel::StaticPlaylist || type == SourcesModel::AutomaticPlaylist || type == SourcesModel::Station )
     {
-        playlist_ptr playlist = SourcesModel::indexToDynamicPlaylist( m_contextMenuIndex );
-        if ( playlist.isNull() )
-        {
-            playlist = SourcesModel::indexToPlaylist( m_contextMenuIndex );
-        }
+
+        PlaylistItem* item = itemFromIndex< PlaylistItem >( m_contextMenuIndex );
+        playlist_ptr playlist = item->playlist();
         if ( !playlist.isNull() )
         {
             readonly = !playlist->author()->isLocal();
         }
     }
 
+    m_loadPlaylistAction = m_playlistMenu.addAction( tr( "&Load Playlist" ) );
+    m_renamePlaylistAction = m_playlistMenu.addAction( tr( "&Rename Playlist" ) );
+    m_playlistMenu.addSeparator();
+
+    m_copyPlaylistAction = m_playlistMenu.addAction( tr( "&Copy Link" ) );
+    m_deletePlaylistAction = m_playlistMenu.addAction( tr( "&Delete %1" ).arg( SourcesModel::rowTypeToString( type ) ) );
+
+    m_roPlaylistMenu.addAction( m_copyPlaylistAction );
+
     m_deletePlaylistAction->setEnabled( !readonly );
     m_renamePlaylistAction->setEnabled( !readonly );
+
+    if ( type == SourcesModel::StaticPlaylist )
+        m_copyPlaylistAction->setText( tr( "&Export Playlist" ) );
 
     connect( m_loadPlaylistAction,   SIGNAL( triggered() ), SLOT( loadPlaylist() ) );
     connect( m_renamePlaylistAction, SIGNAL( triggered() ), SLOT( renamePlaylist() ) );
     connect( m_deletePlaylistAction, SIGNAL( triggered() ), SLOT( deletePlaylist() ) );
+    connect( m_copyPlaylistAction,   SIGNAL( triggered() ), SLOT( copyPlaylistLink() ) );
 }
 
 
@@ -166,113 +173,36 @@ SourceTreeView::hideOfflineSources()
 
 
 void
-SourceTreeView::onSourceOffline( Tomahawk::source_ptr src )
-{
-    qDebug() << Q_FUNC_INFO;
-}
-
-
-void
-SourceTreeView::onPlaylistActivated( const Tomahawk::playlist_ptr& playlist )
-{
-    QModelIndex idx = m_proxyModel->mapFromSource( m_model->playlistToIndex( playlist ) );
-    if ( idx.isValid() )
-    {
-        setCurrentIndex( idx );
-    }
-}
-
-
-void
-SourceTreeView::onDynamicPlaylistActivated( const Tomahawk::dynplaylist_ptr& playlist )
-{
-    QModelIndex idx = m_proxyModel->mapFromSource( m_model->dynamicPlaylistToIndex( playlist ) );
-    if ( idx.isValid() )
-    {
-        setCurrentIndex( idx );
-    }
-}
-
-
-void
-SourceTreeView::onCollectionActivated( const Tomahawk::collection_ptr& collection )
-{
-    QModelIndex idx = m_proxyModel->mapFromSource( m_model->collectionToIndex( collection ) );
-    if ( idx.isValid() )
-    {
-        setCurrentIndex( idx );
-    }
-}
-
-
-void
-SourceTreeView::onSuperCollectionActivated()
-{
-    QModelIndex idx = m_proxyModel->index( 0, 0 );
-    if ( idx.isValid() )
-    {
-        setCurrentIndex( idx );
-    }
-}
-
-
-void
-SourceTreeView::onTempPageActivated()
-{
-    clearSelection();
-}
-
-
-void
 SourceTreeView::onItemActivated( const QModelIndex& index )
 {
     if ( !index.isValid() )
         return;
 
-    SourcesModel::SourceType type = SourcesModel::indexType( index );
-    if ( type == SourcesModel::CollectionSource )
-    {
-        SourceTreeItem* item = SourcesModel::indexToTreeItem( index );
-        if ( item )
-        {
-            if ( item->source().isNull() )
-            {
-                PlaylistManager::instance()->showSuperCollection();
-            }
-            else
-            {
-                qDebug() << "SourceTreeItem toggled:" << item->source()->userName();
+    SourceTreeItem* item = itemFromIndex< SourceTreeItem >( index );
+    item->activate();
+}
 
-                PlaylistManager::instance()->show( item->source()->collection() );
-            }
-        }
-    }
-    else if ( type == SourcesModel::PlaylistSource )
-    {
-        playlist_ptr playlist = SourcesModel::indexToPlaylist( index );
-        if ( !playlist.isNull() )
-        {
-            qDebug() << "Playlist activated:" << playlist->title();
 
-            PlaylistManager::instance()->show( playlist );
-        }
-    }
-    else if ( type == SourcesModel::DynamicPlaylistSource )
-    {
-        dynplaylist_ptr playlist = SourcesModel::indexToDynamicPlaylist( index );
-        if ( !playlist.isNull() )
-        {
-            qDebug() << "Dynamic Playlist activated:" << playlist->title();
-
-            PlaylistManager::instance()->show( playlist );
-        }
+void
+SourceTreeView::onItemExpanded( const QModelIndex& idx )
+{
+    // make sure to expand children nodes for collections
+    if( idx.data( SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::Collection ) {
+       for( int i = 0; i < model()->rowCount( idx ); i++ ) {
+           setExpanded( model()->index( i, 0, idx ), true );
+       }
     }
 }
 
 
 void
-SourceTreeView::onSelectionChanged()
+SourceTreeView::selectRequest( const QModelIndex& idx )
 {
+    if ( !selectionModel()->selectedIndexes().contains( idx ) )
+    {
+        scrollTo( idx, QTreeView::EnsureVisible );
+        selectionModel()->select( idx, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Current );
+    }
 }
 
 
@@ -284,30 +214,48 @@ SourceTreeView::loadPlaylist()
 
 
 void
-SourceTreeView::deletePlaylist()
+SourceTreeView::deletePlaylist( const QModelIndex& idxIn )
 {
     qDebug() << Q_FUNC_INFO;
 
+    QModelIndex idx = idxIn.isValid() ? idxIn : m_contextMenuIndex;
+    if ( !idx.isValid() )
+        return;
+
+    SourcesModel::RowType type = ( SourcesModel::RowType )model()->data( idx, SourcesModel::SourceTreeItemTypeRole ).toInt();
+    if ( type == SourcesModel::StaticPlaylist )
+    {
+        PlaylistItem* item = itemFromIndex< PlaylistItem >( idx );
+        playlist_ptr playlist = item->playlist();
+        Playlist::remove( playlist );
+    } else if( type == SourcesModel::AutomaticPlaylist || type == SourcesModel::Station )
+    {
+        DynamicPlaylistItem* item = itemFromIndex< DynamicPlaylistItem >( idx );
+        dynplaylist_ptr playlist = item->dynPlaylist();
+        DynamicPlaylist::remove( playlist );
+    }
+}
+
+void
+SourceTreeView::copyPlaylistLink()
+{
     QModelIndex idx = m_contextMenuIndex;
     if ( !idx.isValid() )
         return;
 
-    SourcesModel::SourceType type = SourcesModel::indexType( idx );
-    if ( type == SourcesModel::PlaylistSource )
+    SourcesModel::RowType type = ( SourcesModel::RowType )model()->data( m_contextMenuIndex, SourcesModel::SourceTreeItemTypeRole ).toInt();
+    if( type == SourcesModel::AutomaticPlaylist || type == SourcesModel::Station )
     {
-        playlist_ptr playlist = SourcesModel::indexToPlaylist( idx );
-        if ( !playlist.isNull() )
-        {
-            Playlist::remove( playlist );
-        }
-    }
-    else if ( type == SourcesModel::DynamicPlaylistSource )
+        DynamicPlaylistItem* item = itemFromIndex< DynamicPlaylistItem >( m_contextMenuIndex );
+        dynplaylist_ptr playlist = item->dynPlaylist();
+        GlobalActionManager::instance()->copyPlaylistToClipboard( playlist );
+    } else if ( type == SourcesModel::StaticPlaylist )
     {
-        dynplaylist_ptr playlist = SourcesModel::indexToDynamicPlaylist( idx );
-        if( !playlist.isNull() )
-        {
-            DynamicPlaylist::remove( playlist );
-        }
+        PlaylistItem* item = itemFromIndex< PlaylistItem >( m_contextMenuIndex );
+        playlist_ptr playlist = item->playlist();
+
+        QString filename = QFileDialog::getSaveFileName( this, tr( "Save XSPF" ), QDir::homePath(), tr( "Playlists (*.xspf)" ) );
+        GlobalActionManager::instance()->savePlaylistToFile( playlist, filename );
     }
 }
 
@@ -315,7 +263,10 @@ SourceTreeView::deletePlaylist()
 void
 SourceTreeView::renamePlaylist()
 {
-    edit( m_contextMenuIndex );
+    if( !m_contextMenuIndex.isValid() && !selectionModel()->selectedIndexes().isEmpty() )
+        edit( selectionModel()->selectedIndexes().first() );
+    else
+        edit( m_contextMenuIndex );
 }
 
 
@@ -330,9 +281,15 @@ SourceTreeView::onCustomContextMenu( const QPoint& pos )
 
     setupMenus();
 
-    if ( SourcesModel::indexType( idx ) )
+    if ( model()->data( m_contextMenuIndex, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::StaticPlaylist ||
+         model()->data( m_contextMenuIndex, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::AutomaticPlaylist ||
+         model()->data( m_contextMenuIndex, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::Station )
     {
-        m_playlistMenu.exec( mapToGlobal( pos ) );
+        PlaylistItem* item = itemFromIndex< PlaylistItem >( m_contextMenuIndex );
+        if( item->playlist()->author()->isLocal() )
+            m_playlistMenu.exec( mapToGlobal( pos ) );
+        else
+            m_roPlaylistMenu.exec( mapToGlobal( pos ) );
     }
 }
 
@@ -343,7 +300,8 @@ SourceTreeView::dragEnterEvent( QDragEnterEvent* event )
     qDebug() << Q_FUNC_INFO;
     QTreeView::dragEnterEvent( event );
 
-    if ( event->mimeData()->hasFormat( "application/tomahawk.query.list" ) )
+    if ( event->mimeData()->hasFormat( "application/tomahawk.query.list" )
+      || event->mimeData()->hasFormat( "application/tomahawk.result.list" ) )
     {
         m_dragging = true;
         m_dropRect = QRect();
@@ -361,7 +319,8 @@ SourceTreeView::dragMoveEvent( QDragMoveEvent* event )
     bool accept = false;
     QTreeView::dragMoveEvent( event );
 
-    if ( event->mimeData()->hasFormat( "application/tomahawk.query.list" ) )
+    if ( event->mimeData()->hasFormat( "application/tomahawk.query.list" )
+      || event->mimeData()->hasFormat( "application/tomahawk.result.list" ) )
     {
         setDirtyRegion( m_dropRect );
         const QPoint pos = event->pos();
@@ -372,13 +331,12 @@ SourceTreeView::dragMoveEvent( QDragMoveEvent* event )
             const QRect rect = visualRect( index );
             m_dropRect = rect;
 
-            if ( SourcesModel::indexType( index ) == SourcesModel::PlaylistSource )
-            {
-                playlist_ptr playlist = SourcesModel::indexToPlaylist( index );
-                if ( !playlist.isNull() && playlist->author()->isLocal() )
-                    accept = true;
-            }
-        } else {
+            const SourceTreeItem* item = itemFromIndex< SourceTreeItem >( index );
+            if( item->willAcceptDrag( event->mimeData() ) )
+                accept = true;
+        }
+        else
+        {
             m_dropRect = QRect();
         }
 
@@ -398,65 +356,29 @@ SourceTreeView::dragMoveEvent( QDragMoveEvent* event )
 void
 SourceTreeView::dropEvent( QDropEvent* event )
 {
-    bool accept = false;
-    const QPoint pos = event->pos();
-    const QModelIndex index = indexAt( pos );
-
-    if ( event->mimeData()->hasFormat( "application/tomahawk.query.list" ) )
-    {
-        const QPoint pos = event->pos();
-        const QModelIndex index = indexAt( pos );
-
-        if ( index.isValid() )
-        {
-            if ( SourcesModel::indexType( index ) == SourcesModel::PlaylistSource )
-            {
-                playlist_ptr playlist = SourcesModel::indexToPlaylist( index );
-                if ( !playlist.isNull() && playlist->author()->isLocal() )
-                {
-                    accept = true;
-                    QByteArray itemData = event->mimeData()->data( "application/tomahawk.query.list" );
-                    QDataStream stream( &itemData, QIODevice::ReadOnly );
-                    QList<Tomahawk::query_ptr> queries;
-
-                    while ( !stream.atEnd() )
-                    {
-                        qlonglong qptr;
-                        stream >> qptr;
-
-                        Tomahawk::query_ptr* query = reinterpret_cast<Tomahawk::query_ptr*>(qptr);
-                        if ( query && !query->isNull() )
-                        {
-                            qDebug() << "Dropped query item:" << query->data()->artist() << "-" << query->data()->track();
-                            queries << *query;
-                        }
-                    }
-
-                    qDebug() << "on playlist:" << playlist->title() << playlist->guid();
-
-                    SourceTreeItem* treeItem = SourcesModel::indexToTreeItem( index );
-                    if ( treeItem )
-                    {
-                        QString rev = treeItem->currentlyLoadedPlaylistRevision( playlist->guid() );
-                        playlist->addEntries( queries, rev );
-                    }
-                }
-            }
-        }
-
-        if ( accept )
-        {
-            event->setDropAction( Qt::CopyAction );
-            event->accept();
-        }
-        else
-            event->ignore();
-    }
-
     QTreeView::dropEvent( event );
     m_dragging = false;
 }
 
+void
+SourceTreeView::keyPressEvent( QKeyEvent *event )
+{
+    if( ( event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace ) && !selectionModel()->selectedIndexes().isEmpty() )
+    {
+        QModelIndex idx = selectionModel()->selectedIndexes().first();
+        if ( model()->data( idx, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::StaticPlaylist ||
+             model()->data( idx, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::AutomaticPlaylist ||
+             model()->data( idx, SourcesModel::SourceTreeItemTypeRole ) == SourcesModel::Station )
+        {
+            PlaylistItem* item = itemFromIndex< PlaylistItem >( idx );
+            Q_ASSERT( item );
+
+            if( item->playlist()->author()->isLocal() ) {
+                deletePlaylist( idx );
+            }
+        }
+    }
+}
 
 void
 SourceTreeView::paintEvent( QPaintEvent* event )
@@ -486,10 +408,22 @@ SourceTreeView::drawRow( QPainter* painter, const QStyleOptionViewItem& option, 
 }
 
 
+template< typename T > T*
+SourceTreeView::itemFromIndex( const QModelIndex& index ) const
+{
+    Q_ASSERT( model()->data( index, SourcesModel::SourceTreeItemRole ).value< SourceTreeItem* >() );
+
+    T* item = qobject_cast< T* >( model()->data( index, SourcesModel::SourceTreeItemRole ).value< SourceTreeItem* >() );
+    Q_ASSERT( item );
+
+    return item;
+}
+
+
 QSize
 SourceDelegate::sizeHint( const QStyleOptionViewItem& option, const QModelIndex& index ) const
 {
-    if ( index.data( SourceTreeItem::Type ) == SourcesModel::CollectionSource )
+    if ( index.data( SourcesModel::SourceTreeItemTypeRole ).toInt() == SourcesModel::Collection )
         return QSize( option.rect.width(), 44 );
     else
         return QStyledItemDelegate::sizeHint( option, index );
@@ -519,13 +453,17 @@ SourceDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, co
         }
     }
 
+    SourcesModel::RowType type = static_cast< SourcesModel::RowType >( index.data( SourcesModel::SourceTreeItemTypeRole ).toInt() );
+    SourceTreeItem* item = index.data( SourcesModel::SourceTreeItemRole ).value< SourceTreeItem* >();
+    Q_ASSERT( item );
+
     QStyleOptionViewItemV4 o3 = option;
-    if ( index.data( SourceTreeItem::Type ) != SourcesModel::CollectionSource )
+    if ( type != SourcesModel::Collection && type != SourcesModel::Category )
         o3.rect.setX( 0 );
 
     QApplication::style()->drawControl( QStyle::CE_ItemViewItem, &o3, painter );
 
-    if ( index.data( SourceTreeItem::Type ) == SourcesModel::CollectionSource )
+    if ( type == SourcesModel::Collection )
     {
         painter->save();
 
@@ -533,19 +471,25 @@ SourceDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, co
         QFont bold = painter->font();
         bold.setBold( true );
 
-        SourceTreeItem* sti = SourcesModel::indexToTreeItem( index );
-        bool status = !( !sti || sti->source().isNull() || !sti->source()->isOnline() );
+        CollectionItem* colItem = qobject_cast< CollectionItem* >( item );
+        Q_ASSERT( colItem );
+        bool status = !( !colItem || colItem->source().isNull() || !colItem->source()->isOnline() );
+
         QString tracks;
+        QString name = index.data().toString();
         int figWidth = 0;
 
-        if ( status )
+        if ( status && colItem && !colItem->source().isNull() )
         {
-            tracks = QString::number( sti->source()->trackCount() );
+            tracks = QString::number( colItem->source()->trackCount() );
             figWidth = painter->fontMetrics().width( tracks );
+            name = colItem->source()->friendlyName();
         }
 
         QRect iconRect = option.rect.adjusted( 4, 6, -option.rect.width() + option.rect.height() - 12 + 4, -6 );
-        painter->drawPixmap( iconRect, QPixmap( RESPATH "images/user-avatar.png" ).scaledToHeight( iconRect.height(), Qt::SmoothTransformation ) );
+
+        QPixmap avatar = colItem->icon().pixmap( iconRect.size() );
+        painter->drawPixmap( iconRect, avatar.scaledToHeight( iconRect.height(), Qt::SmoothTransformation ) );
 
         if ( ( option.state & QStyle::State_Selected ) == QStyle::State_Selected )
         {
@@ -553,16 +497,16 @@ SourceDelegate::paint( QPainter* painter, const QStyleOptionViewItem& option, co
         }
 
         QRect textRect = option.rect.adjusted( iconRect.width() + 8, 6, -figWidth - 24, 0 );
-        if ( status || sti->source().isNull() )
+        if ( status || colItem->source().isNull() )
             painter->setFont( bold );
-        QString text = painter->fontMetrics().elidedText( index.data().toString(), Qt::ElideRight, textRect.width() );
+        QString text = painter->fontMetrics().elidedText( name, Qt::ElideRight, textRect.width() );
         painter->drawText( textRect, text );
 
-        QString desc = status ? sti->source()->textStatus() : tr( "Offline" );
-        if ( sti->source().isNull() )
+        QString desc = status ? colItem->source()->textStatus() : tr( "Offline" );
+        if ( colItem->source().isNull() )
             desc = tr( "All available tracks" );
-        if ( status && desc.isEmpty() && !sti->source()->currentTrack().isNull() )
-            desc = sti->source()->currentTrack()->artist() + " - " + sti->source()->currentTrack()->track();
+        if ( status && desc.isEmpty() && !colItem->source()->currentTrack().isNull() )
+            desc = colItem->source()->currentTrack()->artist() + " - " + colItem->source()->currentTrack()->track();
         if ( desc.isEmpty() )
             desc = tr( "Online" );
 

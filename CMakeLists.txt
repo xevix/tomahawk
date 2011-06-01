@@ -1,18 +1,25 @@
 PROJECT( tomahawk )
 CMAKE_MINIMUM_REQUIRED( VERSION 2.8 )
 
+IF( ${CMAKE_VERSION} VERSION_GREATER 2.8.3 )
+  CMAKE_POLICY(SET CMP0017 NEW)
+ENDIF( ${CMAKE_VERSION} VERSION_GREATER 2.8.3 )
+
 ###
 ### Tomahawk application info
 ###
-SET( ORGANIZATION_NAME "Tomahawk" )
-SET( ORGANIZATION_DOMAIN "tomahawk-player.org" )
-SET( APPLICATION_NAME  "Tomahawk" )
-SET( VERSION "0.0.3" )
+SET( TOMAHAWK_ORGANIZATION_NAME "Tomahawk" )
+SET( TOMAHAWK_ORGANIZATION_DOMAIN "tomahawk-player.org" )
+SET( TOMAHAWK_APPLICATION_NAME  "Tomahawk" )
+SET( TOMAHAWK_VERSION "0.1.0" )
 
 
 # set paths
 SET( CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH}" "${CMAKE_SOURCE_DIR}/CMakeModules" )
 SET( THIRDPARTY_DIR  ${CMAKE_SOURCE_DIR}/thirdparty )
+SET(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+SET(CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
+SET(CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 
 # Check if we need qtgui:
 IF( "${gui}" STREQUAL "no" )
@@ -29,11 +36,20 @@ INCLUDE( MacroOptionalFindPackage )
 INCLUDE( MacroLogFeature )
 
 # required
-macro_optional_find_package(LibLastFm 0.3.3)
-macro_log_feature(LIBLASTFM_FOUND "LastFm" "Qt library for the Last.fm webservices" "https://github.com/mxcl/liblastfm" FALSE "" "liblastfm is needed for scrobbling tracks to Last.fm and fetching cover artwork")
+#While we distribute our own liblastfm2, don't need to look for it
+#macro_optional_find_package(LibLastFm 0.3.3)
+#macro_log_feature(LIBLASTFM_FOUND "LastFm" "Qt library for the Last.fm webservices" "https://github.com/mxcl/liblastfm" FALSE "" "liblastfm is needed for scrobbling tracks to Last.fm and fetching cover artwork")
+set(LIBLASTFM_FOUND true)
 
-macro_optional_find_package(LibEchonest 1.1.1)
-macro_log_feature(LIBECHONEST_FOUND "Echonest" "Qt library for communicating with The Echo Nest" "http://projects.kde.org/libechonest" TRUE "" "libechonest is needed for dynamic playlists and the infosystem")
+find_package(Phonon REQUIRED)
+if(PHONON_VERSION STRLESS "4.5.0")
+	message(FATAL_ERROR "Phonon version 4.5.0 or higher is required, you have version ${PHONON_VERSION}")
+else()
+	message(STATUS "Phonon found; ensure that phonon-vlc is at least 0.4")
+endif()
+
+macro_optional_find_package(LibEchonest 1.1.7)
+macro_log_feature(LIBECHONEST_FOUND "Echonest" "Qt library for communicating with The Echo Nest" "http://projects.kde.org/libechonest" TRUE "" "libechonest 1.1.8 is needed for dynamic playlists and the infosystem")
 
 macro_optional_find_package(CLucene 0.9.23)
 macro_log_feature(CLucene_FOUND "CLucene" "The open-source, C++ search engine" "http://clucene.sf.net" TRUE "" "CLucene is used for indexing the collection")
@@ -44,9 +60,44 @@ macro_log_feature(QJSON_FOUND "QJson" "Qt library that maps JSON data to QVarian
 macro_optional_find_package(Taglib 1.6.0)
 macro_log_feature(TAGLIB_FOUND "TagLib" "Audio Meta-Data Library" "http://developer.kde.org/~wheeler/taglib.html" TRUE "" "taglib is needed for reading meta data from audio files")
 
+# this installs headers and such and should really be handled in a separate package by packagers
+IF( INTERNAL_JREEN )
+    ADD_SUBDIRECTORY( ${THIRDPARTY_DIR}/jreen )
+    SET( LIBJREEN_INCLUDE_DIR  ${CMAKE_CURRENT_BINARY_DIR}/thirdparty/jreen/include )
+    SET( LIBJREEN_LIBRARY jreen )
+    SET( LIBJREEN_LIBRARIES ${LIBJREEN_LIBRARY} )
+    SET( LIBJREEN_FOUND  true )
+    MESSAGE(STATUS "INTERNAL libjreen: ${LIBJREEN_INCLUDE_DIR}, ${LIBJREEN_LIBRARY}")
+ELSE( INTERNAL_JREEN )
+    macro_optional_find_package(Jreen)
+ENDIF( INTERNAL_JREEN )
+macro_log_feature(LIBJREEN_FOUND "Jreen" "Qt XMPP Library" "http://gitorious.org/jreen/jreen" FALSE "" "Jreen is needed for the Jabber SIP plugin. \n\n     Use -DINTERNAL_JREEN=ON to build the git submodule inside Tomahawk \n     Be aware this installs a full jreen with headers and everything!\n")
+
+# this installs headers and such and should really be handled in a separate package by packagers
+IF( INTERNAL_QTWEETLIB )
+    ADD_SUBDIRECTORY( ${THIRDPARTY_DIR}/qtweetlib )
+    # copy headers to build/QTweetLib so we can use proper includes inside the code
+    FILE( COPY ${CMAKE_SOURCE_DIR}/thirdparty/qtweetlib/QTweetLib/src/ DESTINATION ${CMAKE_BINARY_DIR}/QTweetLib )
+    SET( QTWEETLIB_INCLUDE_DIR  ${CMAKE_BINARY_DIR} )
+    SET( QTWEETLIB_LIBRARY  tomahawk_qtweetlib )
+    SET( QTWEETLIB_LIBRARIES ${QTWEETLIB_LIBRARY} )
+    SET( QTWEETLIB_FOUND  true )
+    MESSAGE(STATUS "INTERNAL libQTweetLib: ${QTWEETLIB_INCLUDE_DIR}, ${QTWEETLIB_LIBRARY}")
+ELSE( INTERNAL_QTWEETLIB )
+    macro_optional_find_package(QTweetLib)
+ENDIF( INTERNAL_QTWEETLIB )
+macro_log_feature(QTWEETLIB_FOUND "QTweetLib" "Qt Twitter Library" "https://github.com/minimoog/QTweetLib" FALSE "" "QTweetLib is needed for the Twitter SIP plugin. \n\n     Use -DINTERNAL_QTWEETLIB=ON to build the git submodule inside Tomahawk \n")
+
+### libportfwd
+SET( LIBPORTFWD_INCLUDE_DIR ${THIRDPARTY_DIR}/libportfwd/include )
+SET( LIBPORTFWD_LIBRARY tomahawk_portfwd )
+SET( LIBPORTFWD_LIBRARIES ${LIBPORTFWD_LIBRARY} )
+ADD_SUBDIRECTORY( ${THIRDPARTY_DIR}/libportfwd )
+
 # we need pthreads too
 find_package(Threads)
 
+find_package(KDE4Installed)
 find_package(KDE4)
 IF(KDE4_FOUND)
     #KDE4 adds and removes some compiler flags that we don't like
@@ -59,40 +110,12 @@ ENDIF()
 include( CheckTagLibFileName )
 check_taglib_filename( COMPLEX_TAGLIB_FILENAME )
 
-# optional
-macro_optional_find_package(Jreen)
-IF( ENABLE_JREEN AND NOT LIBJREEN_FOUND )
-
-    ADD_SUBDIRECTORY( thirdparty/jreen )
-    SET( LIBJREEN_INCLUDE_DIR  ${CMAKE_CURRENT_BINARY_DIR}/thirdparty/jreen/include )
-    IF( UNIX AND NOT APPLE )
-        SET( LIBJREEN_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/thirdparty/jreen/libjreen.so )
-    ENDIF( UNIX AND NOT APPLE )
-    IF( WIN32 )
-	SET( LIBJREEN_LIBRARY ${CMAKE_CURRENT_BINARY_DIR}/thirdparty/jreen/libjreen.dll )
-    ENDIF( WIN32 )
-    SET( LIBJREEN_FOUND  true )
-    MESSAGE(STATUS "Internal libjreen: ${LIBJREEN_INCLUDE_DIR}, ${LIBJREEN_LIBRARY}")
-ENDIF( ENABLE_JREEN AND NOT LIBJREEN_FOUND )
-
 IF( WIN32 )
   find_library(QTSPARKLE_LIBRARIES qtsparkle)
 ENDIF( WIN32 )
 
-macro_log_feature(JREEN_FOUND "Jreen" "Qt XMPP library" "http://gitorious.org/jreen" FALSE "" "Jreen is needed for the alternative/new Jabber SIP plugin. Built automatically inside Tomahawk, if not installed systemwide and ENABLE_JREEN is true")
-
-macro_optional_find_package(Gloox 1.0)
-IF( ENABLE_JREEN )
-    set( GLOOX_FOUND  false )
-ENDIF( ENABLE_JREEN)
-macro_log_feature(GLOOX_FOUND "Gloox" "A portable high-level Jabber/XMPP library for C++" "http://camaya.net/gloox" FALSE "" "Gloox is needed for the Jabber SIP plugin and the XMPP-Bot")
 #show dep log
 macro_display_feature_log()
-MESSAGE("WARNING!")
-MESSAGE("Phonon is going to replace our own audio abstraction layer soon so we didn't")
-MESSAGE("add checks for libmad, libvorbis and libflac. Make sure they are installed!")
-MESSAGE("")
-MESSAGE("-----------------------------------------------------------------------------")
 
 SET( INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}" )
 
@@ -114,5 +137,6 @@ ENDIF( NOT APPLE )
 
 ADD_SUBDIRECTORY( thirdparty )
 ADD_SUBDIRECTORY( src/libtomahawk )
+SET( TOMAHAWK_LIBRARIES tomahawklib )
 ADD_SUBDIRECTORY( src )
 ADD_SUBDIRECTORY( admin )

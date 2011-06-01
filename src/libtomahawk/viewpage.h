@@ -35,6 +35,8 @@ class DLLEXPORT ViewPage
 public:
     ViewPage() {}
 
+    virtual ~ViewPage() {}
+
     virtual QWidget* widget() = 0;
     virtual PlaylistInterface* playlistInterface() const = 0;
 
@@ -44,11 +46,15 @@ public:
 
     virtual bool showStatsBar() const { return true; }
     virtual bool showModes() const { return false; }
+    virtual bool showFilter() const { return false; }
     virtual bool queueVisible() const { return true; }
 
     virtual bool jumpToCurrentTrack() = 0;
 
+    virtual bool isTemporaryPage() const { return false; }
+
     /** subclasses implementing ViewPage can emit the following signals:
+     * nameChanged( const QString& )
      * descriptionChanged( const QString& )
      * destroyed( QWidget* widget );
      *

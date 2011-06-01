@@ -20,8 +20,8 @@
 #define MUSICSCANNER_H
 
 /* taglib */
-#include <fileref.h>
-#include <tag.h>
+#include <taglib/fileref.h>
+#include <taglib/tag.h>
 
 #include <QVariantMap>
 #include <QDir>
@@ -30,6 +30,7 @@
 #include <QDebug>
 #include <QDateTime>
 #include <QTimer>
+#include <QWeakPointer>
 
 // descend dir tree comparing dir mtimes to last known mtime
 // emit signal for any dir with new content, so we can scan it.
@@ -39,8 +40,15 @@ class DirLister : public QObject
 Q_OBJECT
 
 public:
-    DirLister( QDir d, QMap<QString, unsigned int>& mtimes )
-        : QObject(), m_dir( d ), m_dirmtimes( mtimes )
+    
+    enum Mode {
+        NonRecursive,
+        Recursive,
+        MTimeOnly
+    };
+    
+    DirLister( const QStringList& dirs, const QMap<QString, unsigned int>& mtimes, bool recursive )
+        : QObject(), m_dirs( dirs ), m_dirmtimes( mtimes ), m_recursive( recursive )
     {
         qDebug() << Q_FUNC_INFO;
     }
@@ -56,11 +64,13 @@ signals:
 
 private slots:
     void go();
-    void scanDir( QDir dir, int depth );
+    void scanDir( QDir dir, int depth, DirLister::Mode mode );
 
 private:
-    QDir m_dir;
+    QStringList m_dirs;
     QMap<QString, unsigned int> m_dirmtimes;
+    bool m_recursive;
+    
     QMap<QString, unsigned int> m_newdirmtimes;
 };
 
@@ -69,13 +79,15 @@ class MusicScanner : public QObject
 Q_OBJECT
 
 public:
-    MusicScanner( const QString& dir, quint32 bs = 0 );
+    MusicScanner( const QStringList& dirs, bool recursive = true, quint32 bs = 0 );
     ~MusicScanner();
 
 signals:
     //void fileScanned( QVariantMap );
     void finished();
     void batchReady( const QVariantList& );
+    void addWatchedDirs( const QStringList & );
+    void removeWatchedDir( const QString & );
 
 private:
     QVariant readFile( const QFileInfo& fi );
@@ -83,8 +95,6 @@ private:
 private slots:
     void listerFinished( const QMap<QString, unsigned int>& newmtimes );
     void deleteLister();
-    void listerQuit();
-    void listerDestroyed( QObject* dirLister );
     void scanFile( const QFileInfo& fi );
     void startScan();
     void scan();
@@ -92,7 +102,7 @@ private slots:
     void commitBatch( const QVariantList& );
 
 private:
-    QString m_dir;
+    QStringList m_dirs;
     QMap<QString, QString> m_ext2mime; // eg: mp3 -> audio/mpeg
     unsigned int m_scanned;
     unsigned int m_skipped;
@@ -103,9 +113,10 @@ private:
     QMap<QString, unsigned int> m_newdirmtimes;
 
     QList<QVariant> m_scannedfiles;
+    bool m_recursive;
     quint32 m_batchsize;
 
-    DirLister* m_dirLister;
+    QWeakPointer< DirLister > m_dirLister;
     QThread* m_dirListerThreadController;
 };
 

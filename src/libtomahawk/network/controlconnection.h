@@ -33,8 +33,6 @@
 
 #include "dllmacro.h"
 
-class FileTransferSession;
-
 class DLLEXPORT ControlConnection : public Connection
 {
 Q_OBJECT
@@ -45,6 +43,8 @@ public:
     Connection* clone();
 
     DBSyncConnection* dbSyncConnection();
+
+    Tomahawk::source_ptr source() const { return m_source; }
 
 protected:
     virtual void setup();

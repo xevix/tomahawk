@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -24,8 +24,9 @@
 #include "network/controlconnection.h"
 #include "database/databasecommand_addsource.h"
 #include "database/databasecommand_sourceoffline.h"
-#include "database/databasecommand_logplayback.h"
 #include "database/database.h"
+
+#include <QCoreApplication>
 
 using namespace Tomahawk;
 
@@ -37,20 +38,28 @@ Source::Source( int id, const QString& username )
     , m_username( username )
     , m_id( id )
     , m_cc( 0 )
+    , m_avatar( 0 )
 {
     qDebug() << Q_FUNC_INFO << id << username;
+
+    m_scrubFriendlyName = qApp->arguments().contains( "--demo" );
 
     if ( id == 0 )
     {
         m_isLocal = true;
         m_online = true;
     }
+
+    m_currentTrackTimer.setInterval( 600000 ); // 10 minutes
+    m_currentTrackTimer.setSingleShot( true );
+    connect( &m_currentTrackTimer, SIGNAL( timeout() ), this, SLOT( trackTimerFired() ) );
 }
 
 
 Source::~Source()
 {
     qDebug() << Q_FUNC_INFO << friendlyName();
+    delete m_avatar;
 }
 
 
@@ -98,13 +107,42 @@ Source::friendlyName() const
         return m_username;
 
     //TODO: this is a terrible assumption, help me clean this up, mighty muesli!
-    if ( m_friendlyname.contains( "@conference.") )
-        return QString(m_friendlyname).remove( 0, m_friendlyname.lastIndexOf( "/" )+1 ).append(" via MUC");
+    if ( m_friendlyname.contains( "@conference." ) )
+        return QString( m_friendlyname ).remove( 0, m_friendlyname.lastIndexOf( "/" ) + 1 ).append( " via MUC" );
 
-    if ( m_friendlyname.contains( "/tomahawk" ) )
-        return m_friendlyname.left( m_friendlyname.indexOf( "/tomahawk" ) );
+    if ( m_friendlyname.contains( "/" ) )
+        return m_friendlyname.left( m_friendlyname.indexOf( "/" ) );
 
     return m_friendlyname;
+}
+
+
+void
+Source::setAvatar( const QPixmap& avatar )
+{
+    //FIXME: use a proper pixmap store that's thread-safe
+    delete m_avatar;
+    m_avatar = new QPixmap( avatar );
+}
+
+
+QPixmap
+Source::avatar() const
+{
+    //FIXME: use a proper pixmap store that's thread-safe
+    if ( m_avatar )
+        return QPixmap( *m_avatar );
+    else
+        return QPixmap();
+}
+
+
+void
+Source::setFriendlyName( const QString& fname )
+{
+    m_friendlyname = fname;
+    if ( m_scrubFriendlyName )
+        m_friendlyname = m_friendlyname.split( "@" ).first();
 }
 
 
@@ -164,7 +202,7 @@ Source::dbLoaded( unsigned int id, const QString& fname )
     qDebug() << Q_FUNC_INFO << id << fname;
 
     m_id = id;
-    m_friendlyname = fname;
+    setFriendlyName( fname );
 
     emit syncedWithDatabase();
 }
@@ -181,6 +219,7 @@ Source::scanningProgress( unsigned int files )
 void
 Source::scanningFinished( unsigned int files )
 {
+    Q_UNUSED( files );
     m_textStatus = QString();
     emit stateChanged();
 }
@@ -189,6 +228,7 @@ Source::scanningFinished( unsigned int files )
 void
 Source::onStateChanged( DBSyncConnection::State newstate, DBSyncConnection::State oldstate, const QString& info )
 {
+    Q_UNUSED( oldstate );
     QString msg;
     switch( newstate )
     {
@@ -220,6 +260,13 @@ Source::onStateChanged( DBSyncConnection::State newstate, DBSyncConnection::Stat
 }
 
 
+unsigned int
+Source::trackCount() const
+{
+    return m_stats.value( "numfiles" ).toUInt();
+}
+
+
 void
 Source::onPlaybackStarted( const Tomahawk::query_ptr& query )
 {
@@ -234,4 +281,14 @@ Source::onPlaybackFinished( const Tomahawk::query_ptr& query )
 {
     qDebug() << Q_FUNC_INFO << query->toString();
     emit playbackFinished( query );
+
+    m_currentTrackTimer.start();
+}
+
+void
+Source::trackTimerFired()
+{
+    m_currentTrack.clear();
+
+    emit stateChanged();
 }

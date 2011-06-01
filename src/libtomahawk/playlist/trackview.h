@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -26,6 +26,7 @@
 
 #include "dllmacro.h"
 
+class QAction;
 class LoadingSpinner;
 class PlaylistInterface;
 class TrackHeader;
@@ -44,7 +45,8 @@ public:
     virtual QString guid() const { return m_guid; }
     virtual void setGuid( const QString& guid );
 
-    virtual void setModel( TrackModel* model );
+    virtual void setTrackModel( TrackModel* model );
+    virtual void setModel( QAbstractItemModel* model );
     void setProxyModel( TrackProxyModel* model );
 
     virtual TrackModel* model() const { return m_model; }
@@ -67,7 +69,7 @@ protected:
 
     virtual void startDrag( Qt::DropActions supportedActions );
     virtual void dragEnterEvent( QDragEnterEvent* event );
-    virtual void dragLeaveEvent( QDragLeaveEvent* event ) { m_dragging = false; setDirtyRegion( m_dropRect ); }
+    virtual void dragLeaveEvent( QDragLeaveEvent* /*event*/ ) { m_dragging = false; setDirtyRegion( m_dropRect ); }
     virtual void dragMoveEvent( QDragMoveEvent* event );
     virtual void dropEvent( QDropEvent* event );
 
@@ -78,6 +80,8 @@ private slots:
     void onItemResized( const QModelIndex& index );
 
     void onFilterChanged( const QString& filter );
+
+    void copyLink();
 
 private:
     QString m_guid;

@@ -23,6 +23,7 @@
 
 #include "result.h"
 #include "playlistinterface.h"
+#include "infosystem/infosystem.h"
 
 namespace Ui
 {
@@ -40,7 +41,7 @@ public:
 signals:
     void playPressed();
     void pausePressed();
-    
+
 public slots:
     void onRepeatModeChanged( PlaylistInterface::RepeatMode mode );
     void onShuffleModeChanged( bool enabled );
@@ -55,7 +56,7 @@ private slots:
     void onPlaybackResumed();
     void onPlaybackStopped();
 
-    void onPlaybackTimer( unsigned int seconds );
+    void onPlaybackTimer( qint64 msElapsed );
     void onVolumeChanged( int volume );
 
     void onRepeatClicked();
@@ -65,7 +66,8 @@ private slots:
     void onAlbumClicked();
     void onTrackClicked();
 
-    void onCoverArtDownloaded();
+    void infoSystemInfo( QString caller, Tomahawk::InfoSystem::InfoType type, QVariant input, QVariant output, Tomahawk::InfoSystem::InfoCustomData customData );
+    void infoSystemFinished( QString target );
 
 private:
     Ui::AudioControls *ui;

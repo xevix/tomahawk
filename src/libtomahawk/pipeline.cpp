@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -25,7 +25,7 @@
 #include "functimeout.h"
 #include "database/database.h"
 
-#define CONCURRENT_QUERIES 8
+#define CONCURRENT_QUERIES 4
 
 using namespace Tomahawk;
 
@@ -41,32 +41,48 @@ Pipeline::instance()
 
 Pipeline::Pipeline( QObject* parent )
     : QObject( parent )
-    , m_index_ready( false )
+    , m_running( false )
 {
     s_instance = this;
+}
+
+
+Pipeline::~Pipeline()
+{
+    m_running = false;
 }
 
 
 void
 Pipeline::databaseReady()
 {
-    connect( Database::instance(), SIGNAL( indexReady() ), this, SLOT( indexReady() ), Qt::QueuedConnection );
+    connect( Database::instance(), SIGNAL( indexReady() ), this, SLOT( start() ), Qt::QueuedConnection );
     Database::instance()->loadIndex();
 }
 
 
-void Pipeline::indexReady()
+void
+Pipeline::start()
 {
     qDebug() << Q_FUNC_INFO << "shunting this many pending queries:" << m_queries_pending.size();
-    m_index_ready = true;
+    m_running = true;
 
     shuntNext();
 }
 
 
 void
+Pipeline::stop()
+{
+    m_running = false;
+}
+
+
+void
 Pipeline::removeResolver( Resolver* r )
 {
+    QMutexLocker lock( &m_mut );
+
     m_resolvers.removeAll( r );
 }
 
@@ -74,6 +90,8 @@ Pipeline::removeResolver( Resolver* r )
 void
 Pipeline::addResolver( Resolver* r, bool sort )
 {
+    QMutexLocker lock( &m_mut );
+
     m_resolvers.append( r );
     if( sort )
     {
@@ -110,7 +128,7 @@ Pipeline::resolve( const QList<query_ptr>& qlist, bool prioritized )
 
             if ( m_queries_pending.contains( q ) )
             {
-                qDebug() << "Already queued for resolving:" << q->toString();
+//                qDebug() << "Already queued for resolving:" << q->toString();
                 continue;
             }
 
@@ -134,7 +152,7 @@ Pipeline::resolve( const query_ptr& q, bool prioritized )
 {
     if ( q.isNull() )
         return;
-    
+
     QList< query_ptr > qlist;
     qlist << q;
     resolve( qlist, prioritized );
@@ -151,50 +169,54 @@ Pipeline::resolve( QID qid, bool prioritized )
 void
 Pipeline::reportResults( QID qid, const QList< result_ptr >& results )
 {
+    if ( !m_running )
+        return;
+
+    if ( !m_qids.contains( qid ) )
     {
-        QMutexLocker lock( &m_mut );
-
-        if ( !m_qids.contains( qid ) )
-        {
-            qDebug() << "reportResults called for unknown QID" << qid;
-            Q_ASSERT( false );
-            return;
-        }
-
-        if ( !m_qidsState.contains( qid ) )
-        {
-            qDebug() << "reportResults called for unknown QID-state" << qid;
-            Q_ASSERT( false );
-            return;
-        }
+        qDebug() << "reportResults called for unknown QID" << qid;
+        Q_ASSERT( false );
+        return;
     }
 
     const query_ptr& q = m_qids.value( qid );
     if ( !results.isEmpty() )
     {
         //qDebug() << Q_FUNC_INFO << qid;
-        //qDebug() << "solved query:" << (qlonglong)q.data() << q->toString();
 
         q->addResults( results );
-
         foreach( const result_ptr& r, q->results() )
         {
             m_rids.insert( r->id(), r );
         }
 
         if ( q->solved() )
+        {
+//            qDebug() << "FINISHED RESOLVING EARLY" << q->toString();
             q->onResolvingFinished();
+
+            setQIDState( q, 0 );
+            if ( m_qidsTimeout.contains( q->id() ) )
+                m_qidsTimeout.remove( q->id() );
+
+            shuntNext();
+            return;
+        }
     }
 
     if ( decQIDState( q ) == 0 )
     {
-        // All resolvers have reported back their results for this query now
-        qDebug() << "Finished resolving:" << q->toString() << q->numResults();
-
         if ( !q->solved() )
             q->onResolvingFinished();
 
+        if ( m_qidsTimeout.contains( q->id() ) )
+            m_qidsTimeout.remove( q->id() );
+
         shuntNext();
+    }
+    else
+    {
+        new FuncTimeout( 500, boost::bind( &Pipeline::timeoutShunt, this, q ), this );
     }
 }
 
@@ -202,13 +224,15 @@ Pipeline::reportResults( QID qid, const QList< result_ptr >& results )
 void
 Pipeline::shuntNext()
 {
-    if ( !m_index_ready )
+    if ( !m_running )
         return;
 
+    unsigned int rc;
     query_ptr q;
     {
         QMutexLocker lock( &m_mut );
 
+        rc = m_resolvers.count();
         if ( m_queries_pending.isEmpty() )
         {
             if ( m_qidsState.isEmpty() )
@@ -229,10 +253,27 @@ Pipeline::shuntNext()
         q->setLastPipelineWeight( 101 );
     }
 
-    if ( !q.isNull() )
+    setQIDState( q, rc );
+    new FuncTimeout( 500, boost::bind( &Pipeline::shunt, this, q ), this );
+}
+
+
+void
+Pipeline::timeoutShunt( const query_ptr& q )
+{
+    if ( !m_running )
+        return;
+
+    // are we still waiting for a timeout?
+    if ( m_qidsTimeout.contains( q->id() ) )
     {
-        incQIDState( q );
-        shunt( q ); // bump into next stage of pipeline (highest weights are 100)
+        m_qidsTimeout.remove( q->id() );
+        shunt( q );
+    }
+    else
+    {
+        qDebug() << "Reached end of pipeline for:" << q->toString();
+        setQIDState( q, 0 );
     }
 }
 
@@ -240,68 +281,53 @@ Pipeline::shuntNext()
 void
 Pipeline::shunt( const query_ptr& q )
 {
-    qDebug() << Q_FUNC_INFO << q->solved() << q->toString() << q->id();
+    if ( !m_running )
+        return;
+
+//    qDebug() << Q_FUNC_INFO << q->solved() << q->toString() << q->id();
     unsigned int lastweight = 0;
     unsigned int lasttimeout = 0;
 
-    if ( q->solved() )
+    if ( !q->resolvingFinished() )
     {
-//        qDebug() << "Query solved, pipeline aborted:" << q->toString()
-//                 << "numresults:" << q->results().length();
-
-        QList< result_ptr > rl;
-        reportResults( q->id(), rl );
-        return;
-    }
-
-    int thisResolver = 0;
-    int i = 0;
-    foreach( Resolver* r, m_resolvers )
-    {
-        i++;
-        if ( r->weight() >= q->lastPipelineWeight() )
-            continue;
-
-        if ( lastweight == 0 )
+        int i = 0;
+        foreach( Resolver* r, m_resolvers )
         {
-            lastweight = r->weight();
-            lasttimeout = r->timeout();
-            //qDebug() << "Shunting into weight" << lastweight << "q:" << q->toString();
-        }
-        if ( lastweight == r->weight() )
-        {
-            // snag the lowest timeout at this weight
-            if ( r->timeout() < lasttimeout )
+            i++;
+            if ( r->weight() >= q->lastPipelineWeight() )
+                continue;
+
+            if ( lastweight == 0 )
+            {
+                lastweight = r->weight();
                 lasttimeout = r->timeout();
+                //qDebug() << "Shunting into weight" << lastweight << "q:" << q->toString();
+            }
+            if ( lastweight == r->weight() )
+            {
+                // snag the lowest timeout at this weight
+                if ( r->timeout() < lasttimeout )
+                    lasttimeout = r->timeout();
 
-            // resolvers aren't allowed to block in this call:
-            qDebug() << "Dispatching to resolver" << r->name() << q->toString();
-
-            thisResolver = i;
-            r->resolve( q );
+                qDebug() << "Dispatching to resolver" << r->name() << q->toString() << q->solved() << q->id();
+                r->resolve( q );
+            }
+            else
+                break;
         }
-        else
-            break;
     }
 
     if ( lastweight > 0 )
     {
+        //            qDebug() << "Shunting in" << lasttimeout << "ms, q:" << q->toString();
         q->setLastPipelineWeight( lastweight );
-
-        if ( thisResolver < m_resolvers.count() )
-        {
-            incQIDState( q );
-//            qDebug() << "Shunting in" << lasttimeout << "ms, q:" << q->toString();
-            new FuncTimeout( lasttimeout, boost::bind( &Pipeline::shunt, this, q ) );
-        }
+        m_qidsTimeout.insert( q->id(), true );
+        new FuncTimeout( lasttimeout, boost::bind( &Pipeline::timeoutShunt, this, q ), this );
     }
     else
     {
-        //qDebug() << "Reached end of pipeline for:" << q->toString();
-        // reached end of pipeline
-        QList< result_ptr > rl;
-        reportResults( q->id(), rl );
-        return;
+        qDebug() << "Reached end of pipeline for:" << q->toString();
+        setQIDState( q, 0 );
     }
 
     shuntNext();
@@ -311,10 +337,29 @@ Pipeline::shunt( const query_ptr& q )
 bool
 Pipeline::resolverSorter( const Resolver* left, const Resolver* right )
 {
-    if( left->weight() == right->weight() )
-        return left->preference() > right->preference();
+    if( left->weight() == right->weight() ) // TODO dispatch in parallel
+        return left;
     else
         return left->weight() > right->weight();
+}
+
+
+void
+Pipeline::setQIDState( const Tomahawk::query_ptr& query, int state )
+{
+    QMutexLocker lock( &m_mut );
+
+    if ( state > 0 )
+    {
+//        qDebug() << Q_FUNC_INFO << "inserting to qidsstate:" << query->id() << state;
+        m_qidsState.insert( query->id(), state );
+    }
+    else
+    {
+//        qDebug() << Q_FUNC_INFO << "removing" << query->id() << state;
+        if ( m_qidsState.remove( query->id() ) )
+            qDebug() << "Queries running:" << m_qidsState.count();
+    }
 }
 
 
@@ -341,6 +386,9 @@ Pipeline::decQIDState( const Tomahawk::query_ptr& query )
 {
     QMutexLocker lock( &m_mut );
 
+    if ( !m_qidsState.contains( query->id() ) )
+        return 0;
+
     int state = m_qidsState.value( query->id() ) - 1;
     if ( state )
     {
@@ -350,7 +398,8 @@ Pipeline::decQIDState( const Tomahawk::query_ptr& query )
     else
     {
 //        qDebug() << Q_FUNC_INFO << "removing" << query->id() << state;
-        m_qidsState.remove( query->id() );
+        if ( m_qidsState.remove( query->id() ) )
+            qDebug() << "Queries running:" << m_qidsState.count();
     }
 
     return state;

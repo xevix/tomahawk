@@ -60,6 +60,9 @@ void
 Api_v1::auth_2( QxtWebRequestEvent* event, QString arg )
 {
     qDebug() << "AUTH_2 HTTP" << event->url.toString() << arg;
+    if( event->content.isNull() )
+        return;
+
     QString params = QUrl::fromPercentEncoding( event->content->readAll() );
     params = params.mid( params.indexOf( '?' ) );
     QStringList pieces = params.split( '&' );
@@ -145,6 +148,7 @@ Api_v1::api( QxtWebRequestEvent* event )
 void
 Api_v1::sid( QxtWebRequestEvent* event, QString unused )
 {
+    Q_UNUSED( unused );
     using namespace Tomahawk;
     RID rid = event->url.path().mid( 5 );
     qDebug() << "Request for sid " << rid;
@@ -207,6 +211,8 @@ Api_v1::stat( QxtWebRequestEvent* event )
 void
 Api_v1::statResult( const QString& clientToken, const QString& name, bool valid )
 {
+    Q_UNUSED( clientToken )
+    Q_UNUSED( name )
     QVariantMap m;
     m.insert( "name", "playdar" );
     m.insert( "version", "0.1.1" ); // TODO (needs to be >=0.1.1 for JS to work)
@@ -280,7 +286,7 @@ Api_v1::get_results( QxtWebRequestEvent* event )
     r.insert( "poll_interval", 1000 );
     r.insert( "refresh_interval", 1000 );
     r.insert( "poll_limit", 6 );
-    r.insert( "solved", qry->solved() );
+    r.insert( "solved", qry->playable() );
     r.insert( "query", qry->toVariant() );
 
     QVariantList res;

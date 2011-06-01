@@ -1,5 +1,5 @@
 /* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
+ *
  *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
  *
  *   Tomahawk is free software: you can redistribute it and/or modify
@@ -36,6 +36,9 @@ void
 DatabaseCommand_DeleteFiles::postCommitHook()
 {
     qDebug() << Q_FUNC_INFO;
+
+    if ( !m_files.count() )
+        return;
 
     // make the collection object emit its tracksAdded signal, so the
     // collection browser will update/fade in etc.
@@ -78,18 +81,18 @@ DatabaseCommand_DeleteFiles::exec( DatabaseImpl* dbi )
         delquery.prepare( QString( "DELETE FROM file WHERE source %1 AND id = ?" )
                              .arg( source()->isLocal() ? "IS NULL" : QString( "= %1" ).arg( source()->id() ) ) );
 
-        dirquery.bindValue( 0, "file://" + m_dir.absolutePath() + "/%" );
+        dirquery.bindValue( 0, "file://" + m_dir.canonicalPath() + "/%" );
         dirquery.exec();
 
         while ( dirquery.next() )
         {
             QFileInfo fi( dirquery.value( 1 ).toString().mid( 7 ) ); // remove file://
-            if ( fi.absolutePath() != m_dir.absolutePath() )
+            if ( fi.canonicalPath() != m_dir.canonicalPath() )
             {
-                if ( lastPath != fi.absolutePath() )
-                    qDebug() << "Skipping subdir:" << fi.absolutePath();
+                if ( lastPath != fi.canonicalPath() )
+                    qDebug() << "Skipping subdir:" << fi.canonicalPath();
 
-                lastPath = fi.absolutePath();
+                lastPath = fi.canonicalPath();
                 continue;
             }
 
@@ -133,11 +136,11 @@ DatabaseCommand_DeleteFiles::exec( DatabaseImpl* dbi )
                     << delquery.boundValues();
                 continue;
             }
-            
+
             deleted++;
         }
     }
-    
+
     qDebug() << "Deleted" << deleted << m_ids << m_files;
 
     emit done( m_files, source()->collection() );

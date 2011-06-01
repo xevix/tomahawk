@@ -1,85 +1,123 @@
-/* === This file is part of Tomahawk Player - <http://tomahawk-player.org> ===
- * 
- *   Copyright 2010-2011, Christian Muehlhaeuser <muesli@tomahawk-player.org>
- *
- *   Tomahawk is free software: you can redistribute it and/or modify
- *   it under the terms of the GNU General Public License as published by
- *   the Free Software Foundation, either version 3 of the License, or
- *   (at your option) any later version.
- *
- *   Tomahawk is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
- *   GNU General Public License for more details.
- *
- *   You should have received a copy of the GNU General Public License
- *   along with Tomahawk. If not, see <http://www.gnu.org/licenses/>.
- */
+
+/*
+    This program is free software; you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation; either version 2 of the License, or
+    (at your option) any later version.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License along
+    with this program; if not, write to the Free Software Foundation, Inc.,
+    51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+*/
+
 
 #ifndef SOURCESMODEL_H
 #define SOURCESMODEL_H
 
-#include <QStandardItemModel>
+#include <QModelIndex>
+#include <QStringList>
 
-#include "source.h"
 #include "typedefs.h"
 
+class QMimeData;
+
 class SourceTreeItem;
-class SourceTreeView;
 
-class SourcesModel : public QStandardItemModel
+namespace Tomahawk {
+    class Source;
+    class Playlist;
+    class ViewPage;
+}
+
+class SourcesModel : public QAbstractItemModel
 {
-Q_OBJECT
-
-public:    
-    enum SourceType {
+    Q_OBJECT
+public:
+    enum RowType {
         Invalid = -1,
-        
-        CollectionSource = 0,
-        PlaylistSource = 1,
-        DynamicPlaylistSource = 2
+
+        Collection = 0,
+
+        Category = 1,
+        CategoryAdd = 2,
+
+        StaticPlaylist = 3,
+        AutomaticPlaylist = 4,
+        Station = 5,
+
+        GenericPage = 6
     };
-    
-    explicit SourcesModel( SourceTreeView* parent = 0 );
+
+    enum CategoryType {
+        PlaylistsCategory = 0,
+        StationsCategory = 1
+    };
+
+    enum Roles {
+        SourceTreeItemRole      = Qt::UserRole + 10,
+        SourceTreeItemTypeRole  = Qt::UserRole + 11,
+        SortRole                = Qt::UserRole + 12
+    };
+
+    SourcesModel( QObject* parent = 0 );
+    virtual ~SourcesModel();
+
+    static QString rowTypeToString( RowType type );
+
+    // reimplemented from QAIM
+    virtual QVariant data(const QModelIndex& index, int role = Qt::DisplayRole) const;
+    virtual int columnCount(const QModelIndex& parent = QModelIndex()) const;
+    virtual int rowCount(const QModelIndex& parent = QModelIndex()) const;
+    virtual QModelIndex parent(const QModelIndex& child) const;
+    virtual QModelIndex index(int row, int column, const QModelIndex& parent = QModelIndex()) const;
+    virtual bool setData(const QModelIndex& index, const QVariant& value, int role = Qt::EditRole);
 
     virtual QStringList mimeTypes() const;
+    virtual QMimeData* mimeData(const QModelIndexList& indexes) const;
+    virtual bool dropMimeData(const QMimeData* data, Qt::DropAction action, int row, int column, const QModelIndex& parent);
     virtual Qt::DropActions supportedDropActions() const;
-    virtual Qt::ItemFlags flags( const QModelIndex& index ) const;
-    QVariant data( const QModelIndex& index, int role ) const;
+    virtual Qt::ItemFlags flags(const QModelIndex& index) const;
 
-    bool appendItem( const Tomahawk::source_ptr& source );
+    void appendItem( const Tomahawk::source_ptr& source );
     bool removeItem( const Tomahawk::source_ptr& source );
 
-    static SourceType indexType( const QModelIndex& index );
-    static Tomahawk::playlist_ptr indexToPlaylist( const QModelIndex& index );
-    static Tomahawk::dynplaylist_ptr indexToDynamicPlaylist( const QModelIndex& index );
-    static SourceTreeItem* indexToTreeItem( const QModelIndex& index );
+    void linkSourceItemToPage( SourceTreeItem* item, Tomahawk::ViewPage* p );
 
-    QModelIndex playlistToIndex( const Tomahawk::playlist_ptr& playlist );
-    QModelIndex dynamicPlaylistToIndex( const Tomahawk::dynplaylist_ptr& playlist );
-    QModelIndex collectionToIndex( const Tomahawk::collection_ptr& collection );
-    
-signals:
-    void clicked( const QModelIndex& );
-
-protected:
-    bool setData( const QModelIndex& index, const QVariant& value, int role = Qt::EditRole );
-
-private slots:
-    void onSourceAdded( const QList<Tomahawk::source_ptr>& sources );
-    void onSourceAdded( const Tomahawk::source_ptr& source );
-    void onSourceRemoved( const Tomahawk::source_ptr& source );
-
-    void onSourceChanged();
-
-    void onItemOnline( const QModelIndex& idx );
-    void onItemOffline( const QModelIndex& idx );
+    QModelIndex indexFromItem( SourceTreeItem* item ) const;
 
 public slots:
     void loadSources();
 
+    void itemUpdated();
+    void onItemRowsAddedBegin( int first, int last );
+    void onItemRowsAddedDone();
+    void onItemRowsRemovedBegin( int first, int last );
+    void onItemRowsRemovedDone();
+
+    void viewPageActivated( Tomahawk::ViewPage* );
+
+    void itemSelectRequest( SourceTreeItem* item );
+signals:
+    void selectRequest( const QModelIndex& idx );
+
+private slots:
+    void onSourcesAdded( const QList<Tomahawk::source_ptr>& sources );
+    void onSourceAdded( const Tomahawk::source_ptr& source );
+    void onSourceRemoved( const Tomahawk::source_ptr& source );
+
 private:
-    SourceTreeView* m_parent;
+    SourceTreeItem* itemFromIndex( const QModelIndex& idx ) const;
+    int rowForItem( SourceTreeItem* item ) const;
+
+    SourceTreeItem* m_rootItem;
+
+    QHash< Tomahawk::ViewPage*, SourceTreeItem* > m_sourceTreeLinks;
+    Tomahawk::ViewPage* m_viewPageDelayedCacheItem;
 };
 
 #endif // SOURCESMODEL_H
