@@ -69,13 +69,6 @@ SipPlugin::icon() const
     return QIcon();
 }
 
-const QStringList
-SipPlugin::peersOnline() const
-{
-    return m_peersOnline;
-}
-
-
 void
 SipPlugin::refreshProxy()
 {
@@ -94,20 +87,5 @@ SipPlugin::onStateChange( SipPlugin::ConnectionState state )
 {
     Q_UNUSED( state );
     m_cachedError.clear();
-}
-
-void
-SipPlugin::onPeerOnline(const QString& peerId)
-{
-   if( !m_peersOnline.contains( peerId ) )
-   {
-       m_peersOnline.append( peerId );
-   }
-}
-
-void
-SipPlugin::onPeerOffline(const QString& peerId)
-{
-    m_peersOnline.removeAll( peerId );
 }
 

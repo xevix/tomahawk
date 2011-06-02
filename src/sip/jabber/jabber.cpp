@@ -157,10 +157,10 @@ JabberPlugin::refreshProxy()
 
     if( !m_client->connection() )
         return;
-    
+
     QNetworkProxy proxyToUse = TomahawkUtils::proxyFactory()->queryProxy( QNetworkProxyQuery( m_currentServer, m_currentPort ) ).first();
     m_usedProxy = proxyToUse;
-    
+
     if( proxyToUse.type() != QNetworkProxy::NoProxy && ( m_currentServer.isEmpty() || !(m_currentPort > 0) ) )
     {
         qDebug() << Q_FUNC_INFO << " proxy type is not noproxy but no server/port set";
@@ -249,11 +249,6 @@ JabberPlugin::disconnectPlugin()
         }
         return;
     }
-
-    //m_roster->deleteLater();
-    //m_roster = 0;
-    //m_room->deleteLater();
-    //m_room = 0;
 
     m_peers.clear();
     m_legacy_peers.clear();

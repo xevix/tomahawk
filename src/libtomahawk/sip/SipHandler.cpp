@@ -17,19 +17,20 @@
  */
 
 #include "SipHandler.h"
-#include "sip/SipPlugin.h"
+
+#include "SipPlugin.h"
+#include "sourceinfo.h"
+
+#include "functimeout.h"
+#include "database/database.h"
+#include "network/controlconnection.h"
+#include "sourcelist.h"
+#include "tomahawksettings.h"
 
 #include <QCoreApplication>
 #include <QDir>
 #include <QPluginLoader>
 #include <QMessageBox>
-
-#include "functimeout.h"
-
-#include "database/database.h"
-#include "network/controlconnection.h"
-#include "sourcelist.h"
-#include "tomahawksettings.h"
 
 #include "config.h"
 
@@ -456,12 +457,12 @@ SipHandler::refreshProxy()
 
 
 void
-SipHandler::onPeerOnline( const QString& jid )
+onNewSourceInfo( const QSharedPointer< SourceInfo >& sourceInfo )
 {
 //    qDebug() << Q_FUNC_INFO;
-    qDebug() << "SIP online:" << jid;
+    qDebug() << "SIP online:" << sourceInfo->id();
 
-    SipPlugin* sip = qobject_cast<SipPlugin*>(sender());
+    //SipPlugin* sip = sourceInfo->sipPlugin();
 
     QVariantMap m;
     if( Servent::instance()->visibleExternally() )
@@ -471,12 +472,7 @@ SipHandler::onPeerOnline( const QString& jid )
 
         const QString& nodeid = Database::instance()->dbid();
 
-        //TODO: this is a terrible assumption, help me clean this up, mighty muesli!
-        if ( jid.contains( "@conference.") )
-            conn->setName( jid );
-        else
-            conn->setName( jid.left( jid.indexOf( "/" ) ) );
-
+        conn->setName( sourceInfo->id() );
         conn->setId( nodeid );
 
         Servent::instance()->registerOffer( key, conn );
@@ -497,19 +493,10 @@ SipHandler::onPeerOnline( const QString& jid )
     QJson::Serializer ser;
     QByteArray ba = ser.serialize( m );
 
-    sip->sendMsg( jid, QString::fromAscii( ba ) );
+    //sip->sendMessage( jid, QString::fromAscii( ba ) );
 }
 
-
-void
-SipHandler::onPeerOffline( const QString& jid )
-{
-//    qDebug() << Q_FUNC_INFO;
-    qDebug() << "SIP offline:" << jid;
-}
-
-
-void
+/*void
 SipHandler::onSipInfo( const QString& peerId, const SipInfo& info )
 {
     qDebug() << Q_FUNC_INFO << "SIP Message:" << peerId << info;
@@ -518,7 +505,7 @@ SipHandler::onSipInfo( const QString& peerId, const SipInfo& info )
       If only one party is externally visible, connection is obvious
       If both are, peer with lowest IP address initiates the connection.
       This avoids dupe connections.
-     */
+    //
     if ( info.isVisible() )
     {
         if( !Servent::instance()->visibleExternally() ||
@@ -542,19 +529,7 @@ SipHandler::onSipInfo( const QString& peerId, const SipInfo& info )
     }
 
     m_peersSipInfos.insert( peerId, info );
-}
-
-void SipHandler::onSoftwareVersion(const QString& peerId, const QString& versionString)
-{
-    m_peersSoftwareVersions.insert( peerId, versionString );
-}
-
-void
-SipHandler::onMessage( const QString& from, const QString& msg )
-{
-    qDebug() << Q_FUNC_INFO << from << msg;
-}
-
+}*/
 
 void
 SipHandler::onError( int code, const QString& msg )
@@ -596,7 +571,7 @@ SipHandler::onStateChanged( SipPlugin::ConnectionState state )
 }
 
 
-void
+/*void
 SipHandler::onAvatarReceived( const QString& from, const QPixmap& avatar )
 {
 //    qDebug() << Q_FUNC_INFO << "setting avatar on source for" << from;
@@ -631,15 +606,15 @@ SipHandler::onAvatarReceived( const QString& from, const QPixmap& avatar )
     {
 //        qDebug() << Q_FUNC_INFO << from << "no control connection setup yet";
     }
-}
+}*/
 
 
-void
+/*void
 SipHandler::onAvatarReceived( const QPixmap& avatar )
 {
 //    qDebug() << Q_FUNC_INFO << "Set own avatar on MyCollection";
     SourceList::instance()->getLocal()->setAvatar( avatar );
-}
+}*/
 
 
 QString

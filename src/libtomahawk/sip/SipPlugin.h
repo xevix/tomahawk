@@ -20,6 +20,7 @@
 #ifndef SIPPLUGIN_H
 #define SIPPLUGIN_H
 
+#include "sourceinfo.h"
 #include "sipinfo.h"
 
 #include <QObject>
@@ -29,6 +30,7 @@
 
 
 #include "dllmacro.h"
+#include "sourceinfo.h"
 
 class SipPlugin;
 
@@ -85,43 +87,28 @@ public slots:
     virtual bool connectPlugin( bool startup = false ) = 0;
     virtual void disconnectPlugin() = 0;
     virtual void checkSettings() = 0;
-
-    virtual void addContact( const QString &jid, const QString& msg = QString() ) = 0;
-    virtual void sendMsg( const QString& to, const QString& msg ) = 0;
-
     virtual void refreshProxy();
+
+    virtual void addContact( const QSharedPointer< SourceInfo >& sourceInfo, const QString& msg = QString() ) = 0;
+    virtual void sendMessage( const QSharedPointer< SourceInfo >& to, const QString& msg ) = 0;
 
 signals:
     void error( int, const QString& );
     void stateChanged( SipPlugin::ConnectionState state );
 
-    void peerOnline( const QString& );
-    void peerOffline( const QString& );
-    void msgReceived( const QString& from, const QString& msg );
-    void sipInfoReceived( const QString& peerId, const SipInfo& info );
-    void softwareVersionReceived( const QString& peerId, const QString& versionString );
-
-    // new data for own source
-    void avatarReceived ( const QPixmap& avatar );
-
-    // new data for other sources;
-    void avatarReceived ( const QString& from,  const QPixmap& avatar);
-
-
     void addMenu( QMenu* menu );
     void removeMenu( QMenu* menu );
+
+    void newSourceInfo( QSharedPointer<SourceInfo*> sourceInfo );
+    void newMessage( QSharedPointer<SourceInfo*> sourceInfo, const QString& message );
 
 private slots:
     void onError( int, const QString& );
     void onStateChange( SipPlugin::ConnectionState state );
 
-    void onPeerOnline( const QString &peerId );
-    void onPeerOffline( const QString &peerId );
-
 private:
     QString m_pluginId;
     QString m_cachedError;
-    QStringList m_peersOnline;
 };
 
 Q_DECLARE_INTERFACE( SipPluginFactory, "tomahawk.SipFactory/1.0" )

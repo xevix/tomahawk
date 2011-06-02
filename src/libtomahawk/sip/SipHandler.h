@@ -88,22 +88,12 @@ signals:
     void pluginRemoved( SipPlugin* p );
 
 private slots:
-    void onSipInfo( const QString& peerId, const SipInfo& info );
-    void onSoftwareVersion( const QString& peerId, const QString& versionString );
-    void onMessage( const QString&, const QString& );
-    void onPeerOffline( const QString& );
-    void onPeerOnline( const QString& );
+    //void onSipInfo( const QString& peerId, const SipInfo& info );
+    void onNewSourceInfo( const QSharedPointer< SourceInfo >& sourceInfo );
+
     void onError( int code, const QString& msg );
     void onStateChanged( SipPlugin::ConnectionState );
-
     void onSettingsChanged();
-
-    // set data for local source
-    void onAvatarReceived( const QPixmap& avatar );
-
-    // set data for other sources
-    void onAvatarReceived( const QString& from, const QPixmap& avatar );
-
 
 private:
     static SipHandler *s_instance;

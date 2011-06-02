@@ -83,16 +83,11 @@ public:
     virtual QWidget* configWidget();
     virtual void saveConfig();
 
-signals:
-    void jidChanged( const QString& );
-
 public slots:
     virtual bool connectPlugin( bool startup );
     void disconnectPlugin();
     void checkSettings();
-    void sendMsg( const QString& to, const QString& msg );
     void broadcastMsg( const QString &msg );
-    void addContact( const QString &jid, const QString& msg = QString() );
     void refreshProxy();
 
 protected:
@@ -142,15 +137,16 @@ private:
 
     QString m_currentResource;
 
+    QList< QSharedPointer<SourceInfo*> > m_peers;
+    QList< QSharedPointer<SourceInfo*> > m_legacy_peers;
+
     // sort out
     Jreen::Client *m_client;
-
     Jreen::MUCRoom *m_room;
     Jreen::SimpleRoster *m_roster;
-    QHash<Jreen::JID, Jreen::Presence::Type> m_peers;
+
     QHash<Jreen::JID, QMessageBox*> m_subscriptionConfirmBoxes;
     enum IqContext { NoContext, RequestDisco, RequestedDisco, SipMessageSent, RequestedVCard, RequestVersion, RequestedVersion };
-    QStringList m_legacy_peers;
     AvatarManager *m_avatarManager;
 
     QNetworkProxy m_usedProxy;
