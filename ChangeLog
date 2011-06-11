@@ -1,5 +1,17 @@
 Version 0.1.1:
-
+    * Fixed flickering of audio controls when switching between play and paused.
+    * Fixed last.fm not authenticating when using Qt 4.8
+    * Fix crash if manually navigating to authentication page in a browser.
+    * Remove deleted playlists from the UI immediately so that a user can't accidentally
+      delete a playlist twice, crashing all his peers.
+    * Encode paths to resolvers with spaces so all paths work. Before, paths with a space
+      in them would fail to launch.
+    * Fix sorting by file size.
+    * Fix loading moods and styles when no internet connection is present.
+    * Show summary for automatic playlists and stations with song filters.
+    * Show google-specific text in the Add Friends dialog.
+    * Fix issues with config dialogs for account plugins on OS X.
+    * Fix account config window appearing then being moved to the center of the screen
 
 Version 0.1.0:
     * Fixed stations so they resolve against all available sources instead of
