@@ -1,3 +1,6 @@
+Version 0.1.1:
+
+
 Version 0.1.0:
     * Fixed stations so they resolve against all available sources instead of
       only local and friend's collections.

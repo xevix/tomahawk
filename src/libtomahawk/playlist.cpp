@@ -31,6 +31,7 @@
 #include "pipeline.h"
 #include "source.h"
 #include "sourcelist.h"
+#include "tomahawksettings.h"
 
 using namespace Tomahawk;
 
