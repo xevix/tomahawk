@@ -252,8 +252,6 @@ DynamicPlaylist::remove( const Tomahawk::dynplaylist_ptr& playlist )
 {
     playlist->aboutToBeDeleted( playlist );
 
-    TomahawkSettings::instance()->removePlaylistSettings( playlist->guid() );
-
     DatabaseCommand_DeletePlaylist* cmd = new DatabaseCommand_DeleteDynamicPlaylist( playlist->author(), playlist->guid() );
     Database::instance()->enqueue( QSharedPointer<DatabaseCommand>(cmd) );
 
