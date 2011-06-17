@@ -31,6 +31,7 @@
 #include "pipeline.h"
 #include "source.h"
 #include "sourcelist.h"
+#include "tomahawksettings.h"
 
 using namespace Tomahawk;
 
@@ -219,6 +220,8 @@ Playlist::load( const QString& guid )
 bool
 Playlist::remove( const playlist_ptr& playlist )
 {
+    playlist->aboutToBeDeleted( playlist );
+
     DatabaseCommand_DeletePlaylist* cmd = new DatabaseCommand_DeletePlaylist( playlist->author(), playlist->guid() );
     Database::instance()->enqueue( QSharedPointer<DatabaseCommand>(cmd) );
 
