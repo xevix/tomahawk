@@ -4,7 +4,6 @@ Version 0.1.1:
     * Remove duplicates from stations
     * Make twitter sync every 2.5 minutes instead of 1 minute.
     * Fix resolver configuration widgets
-    * Fix potential crash in jabber connection failures
     * Fixed last.fm not authenticating when using Qt 4.8
     * Fix crash if manually navigating to authentication page in a browser.
     * Remove deleted playlists from the UI immediately so that a user can't accidentally
