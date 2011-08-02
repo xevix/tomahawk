@@ -176,6 +176,6 @@ target_link_libraries(tomahawk_qtweetlib
     ${QJSON_LIBRARIES}
 )   
 
-INSTALL(TARGETS tomahawk_qtweetlib DESTINATION lib${LIB_SUFFIX})
+#INSTALL(TARGETS tomahawk_qtweetlib DESTINATION lib${LIB_SUFFIX})
 
 

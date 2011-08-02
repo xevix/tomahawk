@@ -41,12 +41,13 @@ IF(WIN32)
 	TARGET_LINK_LIBRARIES( tomahawk_portfwd "ws2_32.dll" "iphlpapi.a" )
 ENDIF()
 
-INSTALL( TARGETS tomahawk_portfwd
-    RUNTIME DESTINATION bin
-    LIBRARY DESTINATION lib${LIB_SUFFIX}
-    ARCHIVE DESTINATION lib${LIB_SUFFIX}
-    BUNDLE DESTINATION library
-)
+#INSTALL( TARGETS tomahawk_portfwd
+#    RUNTIME DESTINATION bin
+#    LIBRARY DESTINATION lib${LIB_SUFFIX}
+#    ARCHIVE DESTINATION lib${LIB_SUFFIX}
+#    BUNDLE DESTINATION library
+#)
+
 #INSTALL(FILES include/portfwd/portfwddllmacro.h include/portfwd/portfwd.h DESTINATION include/portfwd)
 
 #ADD_EXECUTABLE(portfwd-demo

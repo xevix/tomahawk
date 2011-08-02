@@ -48,7 +48,7 @@ SET( CMAKE_LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
 SET( CMAKE_ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}" )
 
 # installer creation
-INCLUDE( CPack.cmake )
+#INCLUDE( CPack.cmake )
 
 # Check if we need qtgui:
 IF( "${gui}" STREQUAL "no" )
