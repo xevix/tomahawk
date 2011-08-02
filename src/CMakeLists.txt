@@ -307,7 +307,7 @@ if(APPLE)
         set(MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}")
 
         set(MACOSX_BUNDLE_RESOURCES "${PROJECT_BUNDLE_DIR}/Contents/Resources")
-        #set(MACOSX_BUNDLE_ICON "${CMAKE_SOURCE_DIR}/data/icons/${MACOSX_BUNDLE_ICON_FILE}")
+        set(MACOSX_BUNDLE_ICON "${CMAKE_BINARY_DIR}/${EXECUTABLE}/Contents/Resources/${MACOSX_BUNDLE_ICON_FILE}")
         execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory ${MACOSX_BUNDLE_RESOURCES})
         #execute_process(COMMAND ${CMAKE_COMMAND} -E copy_if_different ${MACOSX_BUNDLE_ICON} ${MACOSX_BUNDLE_RESOURCES})
 endif()
