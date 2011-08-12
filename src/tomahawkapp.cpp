@@ -308,7 +308,7 @@ TomahawkApp::instance()
 void
 TomahawkApp::printHelp()
 {
-    tDebug() << "usage: " + arguments().at(0) + " [options]";
+    tDebug() << "usage: " + arguments().at(0) + " [options] [url]";
     tDebug() << "options are:";
     tDebug() << "  --help         Show this help";
     tDebug() << "  --http         Initialize HTTP server";
@@ -316,6 +316,8 @@ TomahawkApp::printHelp()
     tDebug() << "  --testdb       Use a test database instead of real collection";
     tDebug() << "  --noupnp       Disable UPNP";
     tDebug() << "  --nosip        Disable SIP";
+    tDebug() << "\nurl is a tomahawk:// command or alternatively a url that Tomahawk can recognize.";
+    tDebug() << " For more documentation, see http://wiki.tomahawk-player.org/mediawiki/index.php/Tomahawk://_Links";
 }
 
 #ifndef TOMAHAWK_HEADLESS
