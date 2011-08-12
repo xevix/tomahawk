@@ -121,9 +121,15 @@ TomahawkApp::TomahawkApp( int& argc, char *argv[] )
 }
 
 
-void
+bool
 TomahawkApp::init()
 {
+    if ( arguments().contains( "--help" ) || arguments().contains( "-h" ) )
+    {
+        printHelp();
+        ::exit(0);
+    }
+
     Logger::setupLogfile();
     qsrand( QTime( 0, 0, 0 ).secsTo( QTime::currentTime() ) );
 
@@ -246,6 +252,8 @@ TomahawkApp::init()
     {
         m_scanManager.data()->runScan( true );
     }
+
+    return true;
 }
 
 
@@ -297,6 +305,18 @@ TomahawkApp::instance()
     return (TomahawkApp*)TOMAHAWK_APPLICATION::instance();
 }
 
+void
+TomahawkApp::printHelp()
+{
+    std::cout << QString( "usage: " + arguments().at( 0 ) + " [options]" ).toAscii().data();
+    std::cout << QString( "options are:" ).toAscii().data();
+    std::cout << QString( "  --help         Show this help" ).toAscii().data();
+    std::cout << QString( "  --http         Initialize HTTP server" ).toAscii().data();
+    std::cout << QString( "  --filescan     Scan for files on startup" ).toAscii().data();
+    std::cout << QString( "  --testdb       Use a test database instead of real collection" ).toAscii().data();
+    std::cout << QString( "  --noupnp       Disable UPNP" ).toAscii().data();
+    std::cout << QString( "  --nosip        Disable SIP" ).toAscii().data();
+}
 
 #ifndef TOMAHAWK_HEADLESS
 AudioControls*
