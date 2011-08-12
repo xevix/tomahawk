@@ -80,7 +80,7 @@ public:
     TomahawkApp( int& argc, char *argv[] );
     virtual ~TomahawkApp();
 
-    void init();
+    bool init();
     static TomahawkApp* instance();
 
     XMPPBot* xmppBot() { return m_xmppBot.data(); }
@@ -107,6 +107,8 @@ private slots:
 
 private:
     void registerMetaTypes();
+
+    void printHelp();
 
     // Start-up order: database, collection, pipeline, servent, http
     void initDatabase();

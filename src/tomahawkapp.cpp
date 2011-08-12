@@ -121,9 +121,15 @@ TomahawkApp::TomahawkApp( int& argc, char *argv[] )
 }
 
 
-void
+bool
 TomahawkApp::init()
 {
+    if ( arguments().contains( "--help" ) || arguments().contains( "-h" ) )
+    {
+        printHelp();
+        return false;
+    }
+
     Logger::setupLogfile();
     qsrand( QTime( 0, 0, 0 ).secsTo( QTime::currentTime() ) );
 
@@ -246,6 +252,8 @@ TomahawkApp::init()
     {
         m_scanManager.data()->runScan( true );
     }
+
+    return true;
 }
 
 
@@ -297,6 +305,18 @@ TomahawkApp::instance()
     return (TomahawkApp*)TOMAHAWK_APPLICATION::instance();
 }
 
+void
+TomahawkApp::printHelp()
+{
+    tDebug() << "usage: " + arguments().at(0) + " [options]";
+    tDebug() << "options are:";
+    tDebug() << "  --help         Show this help";
+    tDebug() << "  --http         Initialize HTTP server";
+    tDebug() << "  --filescan     Scan for files on startup";
+    tDebug() << "  --testdb       Use a test database instead of real collection";
+    tDebug() << "  --noupnp       Disable UPNP";
+    tDebug() << "  --nosip        Disable SIP";
+}
 
 #ifndef TOMAHAWK_HEADLESS
 AudioControls*
