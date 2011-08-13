@@ -47,7 +47,8 @@ main( int argc, char *argv[] )
     QObject::connect( &guard, SIGNAL( instanceStarted( KDSingleApplicationGuard::Instance ) ), &a, SLOT( instanceStarted( KDSingleApplicationGuard::Instance )  ) );
 
     if ( guard.isPrimaryInstance() )
-        a.init();
+        if ( !a.init() )
+            exit(0);
 
     QString locale = QLocale::system().name();
 
